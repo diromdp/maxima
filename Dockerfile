@@ -21,6 +21,9 @@
     COPY --from=deps /app/node_modules ./node_modules
     COPY . .
     
+    # Hapus paksa file workspace (jika tak sengaja terbawa) agar pnpm tidak error
+    RUN rm -f pnpm-workspace.yaml
+    
     ENV NEXT_TELEMETRY_DISABLED=1
     
     # Build aplikasi Next.js
