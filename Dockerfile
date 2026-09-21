@@ -1,5 +1,5 @@
 # --- STAGE 1: deps ---
-    FROM node:20-alpine AS deps
+    FROM node:22-alpine AS deps
     # Tambahkan libc6-compat karena sering dibutuhkan oleh Next.js di Alpine Linux
     RUN apk add --no-cache libc6-compat
     WORKDIR /app
@@ -13,7 +13,7 @@
     RUN pnpm install --frozen-lockfile
     
     # --- STAGE 2: builder ---
-    FROM node:20-alpine AS builder
+    FROM node:22-alpine AS builder
     WORKDIR /app
     RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
     
@@ -27,7 +27,7 @@
     RUN pnpm run build
     
     # --- STAGE 3: runner (image final) ---
-    FROM node:20-alpine AS runner
+    FROM node:22-alpine AS runner
     WORKDIR /app
     
     ENV NODE_ENV=production
