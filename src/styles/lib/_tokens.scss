@@ -1,0 +1,76 @@
+$ink: #101010;
+$ink-soft: #262626;
+$text-muted: #707070;
+$text-faint: #adadad;
+$canvas: #ffffff;
+$canvas-sunken: #fafafa;
+$canvas-soft: #f4f4f5;
+$field: #f1f1f2;
+$hairline-soft: #ececed;
+$hairline: #e2e2e4;
+$on-primary: #ffffff;
+$accent: #0066ff;
+
+$semantic: (
+  success: (
+    fg: #1f7a45,
+    bg: #f1f8f3,
+    border: #d3e8da,
+    solid: #2f7d51,
+  ),
+  warning: (
+    fg: #8a5a00,
+    bg: #fdf6e9,
+    border: #f0e2c2,
+    solid: #96660c,
+  ),
+  danger: (
+    fg: #a33a3e,
+    bg: #fdf2f2,
+    border: #f1d4d5,
+    solid: #b4474b,
+  ),
+  info: (
+    fg: #1d5f96,
+    bg: #f0f5fb,
+    border: #d3e2f2,
+    solid: #2f6fa8,
+  ),
+  neutral: (
+    fg: #6b6b70,
+    bg: #f5f5f6,
+    border: #e6e6e8,
+    solid: #5f5f63,
+  ),
+);
+
+$status-aliases: (
+  beres: success,
+  berjalan: warning,
+  tindakan: danger,
+  terbuka: info,
+  terkunci: neutral,
+);
+
+$font-heading: var(--font-heading, Montserrat, sans-serif);
+$font-body: var(--font-body, Poppins, sans-serif);
+
+$weight-heading: 650;
+$weight-semibold: 600;
+$weight-body: 400;
+$weight-light: 300;
+
+$radius-none: 0;
+$radius-sm: 16px;
+$radius-md: 24px;
+$radius-full: 9999px;
+
+$space-xxs: 4px;
+$space-xs: 8px;
+$space-sm: 12px;
+$space-md: 16px;
+$space-lg: 24px;
+$space-xl: 32px;
+$space-xxl: 48px;
+$space-section: 80px;
+$space-section-lg: 120px;

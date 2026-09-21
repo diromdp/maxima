@@ -1,0 +1,106 @@
+@use "tokens" as t;
+@use "breakpoints" as bp;
+
+@layer components {
+  .chart-card {
+    background-color: t.$canvas;
+    border: 1px solid t.$hairline-soft;
+    border-radius: t.$radius-md;
+    padding: t.$space-lg;
+
+    @include bp.down(tablet) {
+      padding: t.$space-md;
+    }
+  }
+
+  .chart-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: t.$space-md;
+    margin-bottom: t.$space-md;
+  }
+
+  .chart-title {
+    font-family: t.$font-body;
+    font-size: 16px;
+    font-weight: t.$weight-semibold;
+    color: t.$ink;
+  }
+
+  .chart-note {
+    font-size: 12px;
+    color: t.$text-muted;
+  }
+
+  .chart-frame {
+    width: 100%;
+    height: 280px;
+
+    @include bp.down(tablet) {
+      height: 200px;
+    }
+
+    > svg {
+      display: block;
+      width: 100%;
+    }
+  }
+
+  .chart-frame-sm {
+    height: 160px;
+  }
+
+  .chart-frame-lg {
+    height: 400px;
+
+    @include bp.down(tablet) {
+      height: 260px;
+    }
+  }
+
+  .chart-skeleton {
+    width: 100%;
+    height: 100%;
+    background-color: t.$canvas-soft;
+    border-radius: t.$radius-sm;
+  }
+
+  .chart-spark {
+    display: inline-block;
+    vertical-align: middle;
+    height: 24px;
+  }
+
+  .chart-kpis {
+    display: grid;
+    gap: t.$space-md;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    @include bp.up(laptop) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  .chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: t.$space-sm t.$space-md;
+    margin-top: t.$space-md;
+    font-size: 12px;
+    color: t.$text-muted;
+  }
+
+  .chart-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: t.$space-xxs;
+  }
+
+  .chart-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: t.$radius-full;
+    background-color: currentcolor;
+  }
+}

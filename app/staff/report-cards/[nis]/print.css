@@ -1,0 +1,17 @@
+@media print {
+  .hide-mobile,
+  .only-mobile,
+  .no-print {
+    display: none !important;
+  }
+
+  body,
+  body * {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .card {
+    break-inside: avoid;
+  }
+}

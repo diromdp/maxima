@@ -1,0 +1,130 @@
+@use "sass:map";
+@use "tokens" as t;
+
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: t.$space-xs;
+    height: 44px;
+    padding: 0 t.$space-md;
+    border: 1px solid transparent;
+    border-radius: t.$radius-full;
+    font-family: t.$font-body;
+    font-size: 16px;
+    font-weight: t.$weight-semibold;
+    line-height: 1.38;
+    letter-spacing: 0;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 120ms linear,
+      border-color 120ms linear;
+
+    &:focus-visible {
+      outline: 2px solid t.$ink;
+      outline-offset: 2px;
+    }
+
+    &:disabled,
+    &[aria-disabled="true"] {
+      background-color: t.$canvas-soft;
+      border-color: transparent;
+      color: t.$text-faint;
+      cursor: not-allowed;
+    }
+  }
+
+  .btn-primary {
+    background-color: t.$ink;
+    color: t.$on-primary;
+
+    &:hover:not(:disabled) {
+      background-color: t.$ink-soft;
+    }
+  }
+
+  .btn-secondary {
+    background-color: t.$canvas;
+    border-color: t.$hairline;
+    color: t.$ink;
+
+    &:hover:not(:disabled) {
+      background-color: t.$canvas-soft;
+    }
+  }
+
+  .btn-soft {
+    background-color: t.$canvas-soft;
+    color: t.$ink;
+
+    &:hover:not(:disabled) {
+      background-color: t.$field;
+    }
+  }
+
+  @each $name, $tone in t.$semantic {
+    .btn-#{$name} {
+      background-color: map.get($tone, solid);
+      border-color: transparent;
+      color: t.$on-primary;
+
+      &:hover:not(:disabled) {
+        background-color: map.get($tone, fg);
+      }
+
+      &:focus-visible {
+        outline-color: map.get($tone, solid);
+      }
+    }
+
+    .btn-#{$name}-soft {
+      background-color: map.get($tone, bg);
+      border-color: map.get($tone, border);
+      color: map.get($tone, fg);
+
+      &:hover:not(:disabled) {
+        background-color: map.get($tone, border);
+      }
+    }
+  }
+
+  .btn-error {
+    @extend .btn-danger;
+  }
+
+  .btn-ghost {
+    background-color: transparent;
+    color: t.$ink;
+
+    &:hover:not(:disabled) {
+      background-color: t.$canvas-soft;
+    }
+  }
+
+  .btn-sm {
+    height: 36px;
+    padding: 0 t.$space-sm;
+    font-size: 14px;
+  }
+
+  .btn-lg {
+    height: 52px;
+    padding: 0 t.$space-lg;
+  }
+
+  .btn-block {
+    width: 100%;
+  }
+
+  .btn-icon {
+    width: 44px;
+    padding: 0;
+
+    &.btn-sm {
+      width: 36px;
+    }
+  }
+}

@@ -1,0 +1,91 @@
+@use "sass:map";
+@use "tokens" as t;
+
+.toast.mantine-Notification-root {
+  align-items: flex-start;
+  gap: t.$space-sm;
+  padding: t.$space-sm t.$space-md;
+  border: 1px solid t.$hairline;
+  border-radius: t.$radius-sm;
+  background-color: t.$canvas;
+  box-shadow: 0 8px 24px rgba(16, 16, 16, 0.08);
+
+  &::before {
+    display: none;
+  }
+
+  .mantine-Notification-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    border-radius: t.$radius-full;
+    background-color: t.$canvas-soft;
+    color: t.$ink;
+  }
+
+  .mantine-Notification-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    margin: 0;
+    padding-top: 6px;
+  }
+
+  .mantine-Notification-title,
+  .mantine-Notification-description {
+    overflow: visible;
+    font-family: t.$font-body;
+    line-height: 1.43;
+    white-space: normal;
+    text-overflow: clip;
+  }
+
+  .mantine-Notification-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: t.$weight-semibold;
+    color: t.$ink;
+  }
+
+  .mantine-Notification-description {
+    font-size: 13px;
+    color: t.$text-muted;
+  }
+
+  .mantine-Notification-closeButton {
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 4px;
+    color: t.$text-muted;
+    border-radius: t.$radius-full;
+
+    &:hover {
+      background-color: t.$canvas-soft;
+      color: t.$ink;
+    }
+  }
+}
+
+@each $tone-name, $tone in (success: success, error: danger, info: info) {
+  $colors: map.get(t.$semantic, $tone);
+
+  .toast-#{$tone-name}.mantine-Notification-root {
+    border-color: map.get($colors, border);
+    background-color: map.get($colors, bg);
+
+    .mantine-Notification-icon {
+      background-color: map.get($colors, solid);
+      color: t.$on-primary;
+    }
+
+    .mantine-Notification-title {
+      color: map.get($colors, fg);
+    }
+
+    .mantine-Notification-closeButton:hover {
+      background-color: map.get($colors, border);
+    }
+  }
+}

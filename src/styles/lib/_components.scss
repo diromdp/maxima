@@ -1,0 +1,643 @@
+@use "sass:map";
+@use "tokens" as t;
+@use "breakpoints" as bp;
+
+@layer components {
+  .card {
+    background-color: t.$canvas;
+    border: 1px solid t.$hairline-soft;
+    border-radius: t.$radius-md;
+    padding: t.$space-lg;
+  }
+
+  .card-soft {
+    background-color: t.$canvas-soft;
+    border-color: transparent;
+    border-radius: t.$radius-md;
+    padding: t.$space-lg;
+  }
+
+  .card-inverse {
+    background-color: t.$ink;
+    border-color: transparent;
+    border-radius: t.$radius-md;
+    padding: t.$space-lg;
+    color: t.$on-primary;
+  }
+
+  .card-tight {
+    padding: t.$space-md;
+  }
+
+  .field {
+    display: block;
+    width: 100%;
+    background-color: t.$field;
+    border: 1px solid transparent;
+    border-radius: t.$radius-sm;
+    padding: t.$space-sm t.$space-md;
+    font-family: t.$font-body;
+    font-size: 16px;
+    font-weight: t.$weight-body;
+    line-height: 1.38;
+    color: t.$ink;
+
+    &::placeholder {
+      color: t.$text-faint;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: t.$ink;
+      box-shadow: inset 0 0 0 1px t.$ink;
+    }
+
+    &:disabled {
+      color: t.$text-faint;
+      cursor: not-allowed;
+    }
+  }
+
+  .field-label {
+    display: block;
+    margin-bottom: t.$space-xxs;
+    font-family: t.$font-body;
+    font-size: 12px;
+    font-weight: t.$weight-semibold;
+    color: t.$ink;
+  }
+
+  .field-hint {
+    margin-top: t.$space-xxs;
+    font-size: 12px;
+    color: t.$text-muted;
+  }
+
+  .field-error {
+    margin-top: t.$space-xxs;
+    font-size: 12px;
+    color: map.get(map.get(t.$semantic, danger), fg);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: t.$space-xxs;
+    background-color: t.$canvas-soft;
+    border-radius: t.$radius-full;
+    padding: 2px t.$space-xs;
+    font-family: t.$font-body;
+    font-size: 12px;
+    font-weight: t.$weight-semibold;
+    line-height: 1.33;
+    color: t.$ink;
+  }
+
+  @each $name, $tone in t.$semantic {
+    .badge-#{$name} {
+      background-color: map.get($tone, bg);
+      border: 1px solid map.get($tone, border);
+      color: map.get($tone, fg);
+    }
+
+    .badge-#{$name}-solid {
+      background-color: map.get($tone, solid);
+      border-color: transparent;
+      color: t.$on-primary;
+    }
+
+    .text-#{$name} {
+      color: map.get($tone, fg);
+    }
+  }
+
+  @each $status, $tone-name in t.$status-aliases {
+    $tone: map.get(t.$semantic, $tone-name);
+
+    .badge-#{$status} {
+      background-color: map.get($tone, bg);
+      border: 1px solid map.get($tone, border);
+      color: map.get($tone, fg);
+    }
+
+    .badge-#{$status}-solid {
+      background-color: map.get($tone, solid);
+      border-color: transparent;
+      color: t.$on-primary;
+    }
+
+    .text-#{$status} {
+      color: map.get($tone, fg);
+    }
+  }
+
+  .badge-accent {
+    background-color: t.$accent;
+    color: t.$on-primary;
+  }
+
+  .badge-overlay {
+    background-color: rgba(115, 115, 115, 0.56);
+    color: t.$on-primary;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: t.$space-xs;
+    background-color: t.$canvas-soft;
+    border-radius: t.$radius-full;
+    padding: t.$space-xs t.$space-md;
+    font-size: 14px;
+    font-weight: t.$weight-semibold;
+    color: t.$ink;
+  }
+
+  .nav-row {
+    display: flex;
+    align-items: center;
+    gap: t.$space-xs;
+    border-radius: t.$radius-sm;
+    padding: t.$space-xs t.$space-md;
+    font-size: 14px;
+    color: t.$ink;
+    text-decoration: none;
+
+    &:hover {
+      background-color: t.$canvas-soft;
+    }
+
+    &[aria-current],
+    &.is-active {
+      background-color: t.$canvas-soft;
+      font-weight: t.$weight-semibold;
+    }
+  }
+
+  .segmented {
+    display: inline-flex;
+    gap: t.$space-xxs;
+    background-color: t.$canvas-soft;
+    border-radius: t.$radius-full;
+    padding: t.$space-xxs;
+  }
+
+  .segmented-item {
+    border: 0;
+    background-color: transparent;
+    border-radius: t.$radius-full;
+    padding: t.$space-xs t.$space-md;
+    font-family: t.$font-body;
+    font-size: 14px;
+    font-weight: t.$weight-semibold;
+    color: t.$text-muted;
+    cursor: pointer;
+
+    &.is-active {
+      background-color: t.$canvas;
+      color: t.$ink;
+    }
+  }
+
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: t.$font-body;
+    font-variant-numeric: tabular-nums;
+
+    th {
+      padding: t.$space-sm t.$space-md;
+      border-bottom: 1px solid t.$hairline;
+      font-size: 13px;
+      font-weight: t.$weight-semibold;
+      color: t.$text-muted;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 14px t.$space-md;
+      font-size: 14px;
+      line-height: 1.43;
+      vertical-align: middle;
+    }
+
+    tbody tr + tr td {
+      border-top: 1px solid t.$hairline-soft;
+    }
+
+    tbody tr:hover td {
+      background-color: t.$canvas-sunken;
+    }
+
+    th:first-child,
+    td:first-child {
+      padding-left: 0;
+    }
+
+    th:last-child,
+    td:last-child {
+      padding-right: 0;
+    }
+
+    td {
+      white-space: nowrap;
+    }
+
+    td.wrap,
+    td .wrap {
+      white-space: normal;
+    }
+
+    td .row {
+      flex-wrap: nowrap;
+    }
+
+    .numeric {
+      text-align: right;
+    }
+  }
+
+  .table-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: t.$space-xxs;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+
+    &:hover {
+      color: t.$ink;
+    }
+  }
+
+  th[aria-sort] .table-sort {
+    color: t.$ink;
+  }
+
+  .table-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: t.$space-md;
+    border-top: 1px solid t.$hairline;
+    padding-top: t.$space-sm;
+    font-size: 13px;
+    color: t.$text-muted;
+  }
+
+  .filter-scroll {
+    align-self: flex-start;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+
+    @include bp.down(laptop) {
+      margin-inline: -#{t.$space-md};
+      padding-inline: t.$space-md;
+    }
+  }
+
+  // Kartu level A1-B2: warnanya keadaan — hijau lulus, kuning berjalan, abu
+  // belum mulai. Isian dan garis dari nada semantik; nama level tetap tinta.
+  .level-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: t.$space-sm;
+
+    @include bp.down(tablet) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .level-card {
+    display: flex;
+    flex-direction: column;
+    gap: t.$space-xxs;
+    border: 1px solid t.$hairline-soft;
+    border-radius: t.$radius-sm;
+    padding: t.$space-sm t.$space-md;
+    background-color: t.$canvas-soft;
+  }
+
+  @each $status, $tone-name in t.$status-aliases {
+    $tone: map.get(t.$semantic, $tone-name);
+
+    .level-card-#{$status} {
+      background-color: map.get($tone, bg);
+      border-color: map.get($tone, border);
+      color: map.get($tone, fg);
+    }
+  }
+
+  // Garis perjalanan: N simpul sejajar, garis penghubung lewat ::before/::after
+  // supaya label sepanjang apa pun tidak memecah barisnya. Lingkaran penuh
+  // hijau = selesai, cincin kuning = dikerjakan, abu = menunggu.
+  .journey {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+
+    @include bp.down(tablet) {
+      grid-auto-flow: row;
+      grid-auto-columns: auto;
+      gap: t.$space-sm;
+    }
+  }
+
+  .journey-node {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: t.$space-xs;
+    text-align: center;
+    padding-inline: t.$space-xxs;
+
+    // Garis kiri dan kanan, setinggi pusat lingkaran.
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      top: 16px;
+      width: 50%;
+      height: 2px;
+      background-color: t.$hairline;
+    }
+
+    &::before {
+      left: 0;
+    }
+
+    &::after {
+      right: 0;
+    }
+
+    &:first-child::before,
+    &:last-child::after {
+      display: none;
+    }
+
+    // Garis yang sudah dilewati ikut hijau.
+    &[data-state="selesai"]::before,
+    &[data-state="selesai"]::after,
+    &[data-state="dikerjakan"]::before {
+      background-color: map.get(map.get(t.$semantic, success), solid);
+    }
+
+    @include bp.down(tablet) {
+      flex-direction: row;
+      text-align: left;
+
+      &::before,
+      &::after {
+        display: none;
+      }
+    }
+  }
+
+  .journey-dot {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: t.$radius-full;
+    border: 2px solid t.$hairline;
+    background-color: t.$canvas;
+    font-size: 13px;
+    font-weight: t.$weight-semibold;
+    color: t.$text-muted;
+    flex-shrink: 0;
+
+    [data-state="selesai"] > & {
+      border-color: map.get(map.get(t.$semantic, success), solid);
+      background-color: map.get(map.get(t.$semantic, success), solid);
+      color: t.$on-primary;
+    }
+
+    [data-state="dikerjakan"] > & {
+      border-color: map.get(map.get(t.$semantic, warning), solid);
+      color: map.get(map.get(t.$semantic, warning), fg);
+    }
+  }
+
+  .row-soft {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: t.$space-md;
+    background-color: t.$canvas-soft;
+    border-radius: t.$radius-sm;
+    padding: t.$space-md;
+  }
+
+  .list-rows > * {
+    padding-block: t.$space-sm;
+  }
+
+  .list-rows > * + * {
+    border-top: 1px solid t.$hairline-soft;
+  }
+
+  .list-rows > *:first-child {
+    padding-top: 0;
+  }
+
+  .list-rows > *:last-child {
+    padding-bottom: 0;
+  }
+
+  .progress {
+    height: 6px;
+    background-color: t.$hairline;
+    border-radius: t.$radius-full;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background-color: map.get(map.get(t.$semantic, info), solid);
+    border-radius: t.$radius-full;
+  }
+
+  @each $name, $tone in t.$semantic {
+    .progress-#{$name} .progress-fill {
+      background-color: map.get($tone, solid);
+    }
+  }
+
+  .notice {
+    display: flex;
+    align-items: flex-start;
+    gap: t.$space-sm;
+    border-left: 3px solid t.$ink;
+    border-radius: t.$radius-sm;
+    padding: t.$space-sm t.$space-md;
+    background-color: t.$canvas-soft;
+    font-size: 14px;
+    line-height: 1.5;
+    color: t.$ink-soft;
+  }
+
+  .notice-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .notice-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: t.$space-xxs;
+    min-width: 0;
+  }
+
+  .notice-title {
+    font-weight: t.$weight-semibold;
+  }
+
+  .notice-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: t.$space-xs;
+  }
+
+  @each $name, $tone in t.$semantic {
+    .notice-#{$name} {
+      background-color: map.get($tone, bg);
+      border-left-color: map.get($tone, fg);
+      color: map.get($tone, fg);
+    }
+  }
+
+  @each $status, $tone-name in t.$status-aliases {
+    $tone: map.get(t.$semantic, $tone-name);
+
+    .notice-#{$status} {
+      background-color: map.get($tone, bg);
+      border-left-color: map.get($tone, fg);
+      color: map.get($tone, fg);
+    }
+  }
+
+  @include bp.down(tablet) {
+    .notice {
+      flex-wrap: wrap;
+    }
+
+    .notice-actions {
+      width: 100%;
+    }
+  }
+
+  .calendar-layout {
+    display: grid;
+    gap: t.$space-lg;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+
+    @include bp.up(laptop) {
+      grid-template-columns: 220px minmax(0, 1fr);
+    }
+  }
+
+  .calendar {
+    width: 100%;
+    min-width: 640px;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid t.$hairline;
+    border-radius: t.$radius-sm;
+    overflow: hidden;
+    background-color: t.$canvas;
+    font-family: t.$font-body;
+    table-layout: fixed;
+
+    th {
+      padding: t.$space-xs;
+      border-bottom: 1px solid t.$hairline;
+      font-size: 12px;
+      font-weight: t.$weight-semibold;
+      color: t.$text-muted;
+      text-align: center;
+    }
+
+    td {
+      height: 104px;
+      padding: t.$space-xs;
+      vertical-align: top;
+      border-bottom: 1px solid t.$hairline-soft;
+    }
+
+    td + td {
+      border-left: 1px solid t.$hairline-soft;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+  }
+
+  .calendar-week td {
+    height: 280px;
+  }
+
+  .calendar-day-outside {
+    background-color: t.$canvas-sunken;
+
+    .calendar-date {
+      color: t.$text-faint;
+    }
+  }
+
+  .calendar-date {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    margin-bottom: t.$space-xxs;
+    border-radius: t.$radius-full;
+    font-size: 13px;
+    font-weight: t.$weight-semibold;
+    color: t.$ink;
+  }
+
+  .calendar-day-today .calendar-date {
+    background-color: t.$ink;
+    color: t.$on-primary;
+  }
+
+  .calendar-event {
+    display: block;
+    width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    border-radius: t.$radius-sm;
+
+    & + & {
+      margin-top: t.$space-xxs;
+    }
+  }
+
+  .squircle {
+    border-radius: 30%;
+    overflow: hidden;
+  }
+
+  .media {
+    border-radius: t.$radius-md;
+    overflow: hidden;
+  }
+}

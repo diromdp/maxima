@@ -1,49 +1,202 @@
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@source "../app";
+@source "../src";
+
+@theme {
+  --color-ink: #101010;
+  --color-ink-soft: #262626;
+  --color-muted: #707070;
+  --color-faint: #adadad;
+  --color-canvas: #ffffff;
+  --color-canvas-sunken: #fafafa;
+  --color-canvas-soft: #f4f4f5;
+  --color-field: #f1f1f2;
+  --color-hairline: #e2e2e4;
+  --color-hairline-soft: #ececed;
+  --color-accent: #0066ff;
+
+  --color-success: #1f7a45;
+  --color-success-bg: #f1f8f3;
+  --color-success-solid: #2f7d51;
+  --color-warning: #8a5a00;
+  --color-warning-bg: #fdf6e9;
+  --color-warning-solid: #96660c;
+  --color-danger: #a33a3e;
+  --color-danger-bg: #fdf2f2;
+  --color-danger-solid: #b4474b;
+  --color-info: #1d5f96;
+  --color-info-bg: #f0f5fb;
+  --color-info-solid: #2f6fa8;
+
+  --font-sans: var(--font-body, Poppins, sans-serif);
+  --font-display: var(--font-heading, Montserrat, sans-serif);
+
+  --radius-sm: 16px;
+  --radius-md: 24px;
+
+  --breakpoint-tablet: 768px;
+  --breakpoint-laptop: 1024px;
+  --breakpoint-desktop: 1280px;
+  --breakpoint-wide: 1536px;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --page-bg: #fafafa;
+  --canvas-soft: #f4f4f5;
+  --field: #f1f1f2;
+  --hairline-soft: #ececed;
+  --hairline: #e2e2e4;
+  --ink: #101010;
+  --ink-soft: #262626;
+  --text-muted: #707070;
+  --text-faint: #adadad;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-html {
-  height: 100%;
+  --mantine-color-dimmed: var(--text-muted);
+  --mantine-color-placeholder: var(--text-faint);
 }
 
 html,
 body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-* {
-  box-sizing: border-box;
   padding: 0;
   margin: 0;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+body {
+  background-color: var(--page-bg);
+
+  color: var(--ink-soft);
+
+  font-weight: 400;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+table td,
+table th {
+  font-variant-numeric: tabular-nums;
+}
+
+.mantine-InputWrapper-label {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.mantine-InputWrapper-required {
+  color: var(--color-danger);
+}
+
+.mantine-InputWrapper-description,
+.mantine-InputWrapper-error {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.33;
+}
+
+.mantine-InputWrapper-description {
+  color: var(--text-muted);
+}
+
+.mantine-Input-input {
+  line-height: 1.38;
+  color: var(--ink);
+}
+
+.mantine-Input-input::placeholder {
+  color: var(--text-faint);
+}
+
+.mantine-Input-input[data-variant="filled"] {
+  background-color: var(--field);
+  border-color: transparent;
+}
+
+.mantine-Input-input[data-variant="filled"]:focus,
+.mantine-Input-input[data-variant="filled"]:focus-within {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.mantine-Input-input[data-error] {
+  border-color: var(--color-danger);
+}
+
+.mantine-Input-input:disabled,
+.mantine-Input-input[data-disabled] {
+  background-color: var(--canvas-soft);
+  color: var(--text-faint);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.mantine-Input-input[readonly] {
+  color: var(--text-muted);
+}
+
+.mantine-Input-section {
+  color: var(--text-muted);
+}
+
+.mantine-Checkbox-label,
+.mantine-Radio-label {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.mantine-RadioCard-card,
+.mantine-CheckboxCard-card {
+  border-color: var(--hairline-soft);
+  background-color: var(--canvas);
+}
+
+.mantine-RadioCard-card[data-checked],
+.mantine-CheckboxCard-card[data-checked] {
+  border-color: var(--ink);
+}
+
+.mantine-Dropzone-root {
+  border: 1px dashed var(--hairline);
+  background-color: var(--field);
+  padding: 16px;
+}
+
+.mantine-Dropzone-root:hover,
+.mantine-Dropzone-root[data-accept] {
+  border-color: var(--ink);
+  background-color: var(--canvas-soft);
+}
+
+.mantine-Dropzone-root[data-reject] {
+  border-color: var(--color-danger);
+  background-color: var(--color-danger-bg);
+}
+
+.mantine-SegmentedControl-root {
+  background-color: var(--canvas-soft);
+}
+
+.mantine-SegmentedControl-label[data-active] {
+  color: var(--ink);
+}
+
+.mantine-NavLink-root {
+  border-radius: 16px;
+}
+
+.nav-row:hover {
+  background-color: var(--page-bg);
+}
+
+.nav-row[data-active] {
+  background-color: var(--canvas-soft);
+}
+
+.mantine-Card-root,
+.mantine-Paper-root {
+  border-color: var(--hairline-soft);
 }

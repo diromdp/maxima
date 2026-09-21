@@ -1,3 +1,6 @@
 allowBuilds:
+  # Watcher native Tailwind — hanya mempercepat mode watch, tidak dibutuhkan
+  # untuk build.
+  '@parcel/watcher': false
   sharp: false
   unrs-resolver: false

@@ -1,0 +1,67 @@
+@use "sass:list";
+@use "sass:map";
+
+$breakpoints: (
+  mobile: 0,
+  tablet: 768px,
+  laptop: 1024px,
+  desktop: 1280px,
+  wide: 1536px,
+);
+
+@mixin up($name) {
+  $min: map.get($breakpoints, $name);
+
+  @if $min == null {
+    @error "Breakpoint `#{$name}` tidak ada. Pilihan: #{map.keys($breakpoints)}.";
+  }
+
+  @if $min == 0 {
+    @content;
+  } @else {
+    @media (min-width: $min) {
+      @content;
+    }
+  }
+}
+
+@mixin down($name) {
+  $min: map.get($breakpoints, $name);
+
+  @if $min == null {
+    @error "Breakpoint `#{$name}` tidak ada. Pilihan: #{map.keys($breakpoints)}.";
+  }
+
+  @if $min == 0 {
+    @error "`down(mobile)` tidak punya arti — mobile adalah dasarnya.";
+  }
+
+  @media (max-width: $min - 0.02px) {
+    @content;
+  }
+}
+
+@mixin only($name) {
+  $keys: map.keys($breakpoints);
+  $i: list.index($keys, $name);
+
+  @if $i == null {
+    @error "Breakpoint `#{$name}` tidak ada. Pilihan: #{$keys}.";
+  }
+
+  $next: null;
+
+  @if $i < list.length($keys) {
+    $next: list.nth($keys, $i + 1);
+  }
+
+  @if $next == null {
+    @include up($name) {
+      @content;
+    }
+  } @else {
+    @media (min-width: map.get($breakpoints, $name)) and (max-width: map.get($breakpoints, $next) - 0.02px) {
+      @content;
+    }
+  }
+}

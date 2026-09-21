@@ -1,0 +1,165 @@
+@use "tokens" as t;
+@use "breakpoints" as bp;
+
+@layer components {
+  %heading-base {
+    margin: 0;
+    font-family: t.$font-heading;
+    font-weight: t.$weight-heading;
+    letter-spacing: 0;
+    color: t.$ink;
+  }
+
+  .display {
+    @extend %heading-base;
+    font-size: 80px;
+    line-height: 1;
+
+    @include bp.down(laptop) {
+      font-size: 56px;
+    }
+
+    @include bp.down(tablet) {
+      font-size: 40px;
+    }
+  }
+
+  h1,
+  .h1 {
+    @extend %heading-base;
+    font-size: 56px;
+    line-height: 1;
+
+    @include bp.down(tablet) {
+      font-size: 36px;
+    }
+  }
+
+  h2,
+  .h2 {
+    @extend %heading-base;
+    font-size: 44px;
+    line-height: 1.13;
+
+    @include bp.down(tablet) {
+      font-size: 30px;
+    }
+  }
+
+  h3,
+  .h3 {
+    @extend %heading-base;
+    font-size: 32px;
+    line-height: 1.13;
+
+    @include bp.down(tablet) {
+      font-size: 24px;
+    }
+  }
+
+  h4,
+  .h4 {
+    @extend %heading-base;
+    font-size: 24px;
+    line-height: 1.25;
+  }
+
+  h5,
+  .h5,
+  .title {
+    @extend %heading-base;
+    font-family: t.$font-body;
+    font-weight: t.$weight-semibold;
+    font-size: 20px;
+    line-height: 1.3;
+  }
+
+  h6,
+  .h6 {
+    @extend %heading-base;
+    font-family: t.$font-body;
+    font-weight: t.$weight-semibold;
+    font-size: 16px;
+    line-height: 1.38;
+  }
+
+  %text-base {
+    margin: 0;
+    font-family: t.$font-body;
+    letter-spacing: 0;
+    color: t.$ink-soft;
+  }
+
+  .body-lg {
+    @extend %text-base;
+    font-size: 20px;
+    font-weight: t.$weight-light;
+    line-height: 1.38;
+
+    @include bp.down(tablet) {
+      font-size: 17px;
+    }
+  }
+
+  .body {
+    @extend %text-base;
+    font-size: 16px;
+    font-weight: t.$weight-body;
+    line-height: 1.38;
+  }
+
+  .body-sm {
+    @extend %text-base;
+    font-size: 14px;
+    font-weight: t.$weight-body;
+    line-height: 1.43;
+  }
+
+  .link {
+    @extend %text-base;
+    font-size: 16px;
+    font-weight: t.$weight-semibold;
+    line-height: 1.38;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover {
+      color: t.$ink-soft;
+    }
+  }
+
+  .label {
+    @extend %text-base;
+    font-size: 12px;
+    font-weight: t.$weight-semibold;
+    line-height: 1.33;
+  }
+
+  .caption {
+    @extend %text-base;
+    font-size: 12px;
+    font-weight: t.$weight-body;
+    line-height: 1.33;
+  }
+
+  .text-muted {
+    color: t.$text-muted;
+  }
+
+  .text-faint {
+    color: t.$text-faint;
+  }
+
+  .text-ink {
+    color: t.$ink;
+  }
+
+  .text-on-primary {
+    color: t.$on-primary;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+}
