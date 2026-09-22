@@ -127,7 +127,7 @@ export function DistributionCard({
               barRadius={4}
               barGap={hasDebt ? 0.15 : rows.length > 6 ? 0.35 : 0.6}
               groupGap={0.35}
-              showLabels
+              showLabels={width >= 640}
             />
           )}
         </ResponsiveChart>

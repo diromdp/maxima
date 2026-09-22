@@ -81,7 +81,7 @@ export default async function LearningPage() {
           </Text>
         </Group>
 
-        <div className="grid-4" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+        <div className="grid grid-cols-3 gap-4 md:grid-cols-5">
           {ATTENDANCE_ROWS.map((r) => (
             <div key={r.label} className="stack" style={{ gap: 2 }}>
               <span className="spec-name">{r.label}</span>

@@ -64,6 +64,13 @@ const DEFAULT_ROUTES = [
   "/portal/learning",
   "/portal/language-certificates",
   "/portal/documents",
+  "/portal/alumni-files",
+  "/portal/profile",
+  "/portal/profile/change-request",
+  "/portal/leave",
+  "/portal/leave/new",
+  "/portal/leave/CUTI-2026-1201-0233",
+  "/portal/leave/CUTI-2025-1001-0233",
 ]
 const CHROME =
   process.env.CHROME_PATH ??

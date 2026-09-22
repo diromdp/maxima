@@ -129,7 +129,7 @@ export function FinanceBalance({ invoicesHref }: { invoicesHref: string }) {
             barRadius={4}
             barGap={0.15}
             groupGap={0.35}
-            showLabels
+            showLabels={width >= 640}
           />
         )}
       </ResponsiveChart>

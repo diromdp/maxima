@@ -51,7 +51,7 @@ export default async function ProfilePage() {
           </Avatar>
           <div className="stack" style={{ gap: 6, minWidth: 0 }}>
             <span className="title">{STUDENT.fullName}</span>
-            <span className="caption text-muted tabular">{deriveIdentity(DASHBOARD_STUDENT)}</span>
+            <span className="caption text-muted">{deriveIdentity(DASHBOARD_STUDENT)}</span>
             <span className="badge badge-beres" style={{ alignSelf: "flex-start" }}>
               {STUDENT.status}
             </span>
