@@ -3,11 +3,18 @@
 import { Chip } from "@mantine/core"
 
 import {
-  ATTENDANCE_BADGE,
   ATTENDANCE_STATUSES,
   type AttendanceStatus,
   type SessionStudent,
-} from "./sample"
+} from "@/src/entities/session/schema"
+
+const ATTENDANCE_BADGE: Readonly<Record<AttendanceStatus, string>> = {
+  Hadir: "badge-beres",
+  Izin: "badge-berjalan",
+  Sakit: "badge-berjalan",
+  Alpha: "badge-tindakan",
+  Terlambat: "badge-tindakan",
+}
 
 export type AttendanceMap = Readonly<Record<string, AttendanceStatus | undefined>>
 
@@ -23,7 +30,7 @@ export function AttendanceTable({
   attendance: AttendanceMap
   missing: number
   readOnly: boolean
-  onChange: (nis: string, status: AttendanceStatus) => void
+  onChange: (studentId: string, status: AttendanceStatus) => void
   onMarkAllPresent: () => void
 }) {
   return (
@@ -48,7 +55,8 @@ export function AttendanceTable({
 
       {students.length === 0 ? (
         <p className="body-sm text-muted" style={{ margin: 0 }}>
-          Belum ada anggota aktif di kelas ini. Tambahkan siswa lewat Kelas & Jadwal.
+          Belum ada anggota aktif di kelas ini pada tanggal sesi. Tambahkan siswa lewat Kelas &
+          Jadwal.
         </p>
       ) : (
         <div className="table-scroll">
@@ -61,9 +69,9 @@ export function AttendanceTable({
             </thead>
             <tbody>
               {students.map((student) => {
-                const status = attendance[student.nis]
+                const status = attendance[student.studentId]
                 return (
-                  <tr key={student.nis}>
+                  <tr key={student.studentId}>
                     <td style={{ fontWeight: 600 }}>{student.name}</td>
                     <td className="wrap">
                       {readOnly ? (
@@ -77,7 +85,7 @@ export function AttendanceTable({
                           value={status ?? null}
                           onChange={(value) =>
                             typeof value === "string" &&
-                            onChange(student.nis, value as AttendanceStatus)
+                            onChange(student.studentId, value as AttendanceStatus)
                           }
                         >
                           <div

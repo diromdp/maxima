@@ -1,121 +1,159 @@
 "use client"
 
-import { Select } from "@mantine/core"
+import { Select, Skeleton } from "@mantine/core"
 import { useState } from "react"
 
 import { DataTable, type DataColumn } from "@/src/components/data/DataTable"
-import { formatPercent } from "@/src/lib/format"
-
-import { AddMembersModal } from "./AddMembersModal"
-import { TransferModal } from "./TransferModal"
+import { QueryError } from "@/src/components/data/QueryError"
+import { activeClassesQuery, classMembersQuery } from "@/src/entities/class/queries"
 import {
   capacityLabel,
   classLabel,
-  CLASSES,
-  type ClassMember,
-  LOW_ATTENDANCE,
-  MEMBER_STATUS_BADGE,
-  MEMBERS_BY_CLASS,
-  scheduleLabel,
-} from "./sample"
+  type ClassRow,
+  type MemberRow,
+  type MemberStatus,
+} from "@/src/entities/class/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { DASH } from "@/src/lib/format"
+import { useUrlParam } from "@/src/lib/use-url-param"
 
-const ACTIVE_CLASSES = CLASSES.filter((room) => room.status === "Aktif")
+import { AddMembersModal } from "./AddMembersModal"
+import { Facts } from "./DialogParts"
+import { ClassTableSkeleton } from "./MasterClassTable"
+import { RemoveMemberModal } from "./RemoveMemberModal"
+import { TransferModal } from "./TransferModal"
 
-type Row = ClassMember & { readonly number: number }
+const LOW_ATTENDANCE = 75
 
-const columnsFor = (onTransfer: (member: ClassMember) => void): readonly DataColumn<Row>[] => [
-  {
-    key: "number",
-    header: "No",
-    cell: (row) => <span className="tabular text-muted">{row.number}</span>,
-  },
-  {
-    key: "nis",
-    header: "NIS",
-    sort: (row) => row.nis,
-    cell: (row) => <span className="tabular">{row.nis}</span>,
-  },
-  {
-    key: "name",
-    header: "Nama Siswa",
-    sort: (row) => row.name,
-    cell: (row) => <span style={{ fontWeight: 600 }}>{row.name}</span>,
-  },
-  {
-    key: "attendance",
-    header: "Kehadiran (%)",
-    sort: (row) => row.attendance,
-    align: "right",
-    cell: (row) => (
-      <span className={row.attendance < LOW_ATTENDANCE ? "text-danger" : undefined}>
-        {formatPercent(row.attendance)}
-      </span>
-    ),
-  },
-  {
-    key: "averageScore",
-    header: "Nilai Rata-rata",
-    sort: (row) => row.averageScore,
-    align: "right",
-    cell: (row) => row.averageScore,
-  },
-  {
-    key: "lastChapter",
-    header: "Bab Terakhir",
-    sort: (row) => row.lastChapter,
-    cell: (row) => row.lastChapter,
-  },
-  {
-    key: "status",
-    header: "Status",
-    sort: (row) => row.status,
-    cell: (row) => <span className={`badge ${MEMBER_STATUS_BADGE[row.status]}`}>{row.status}</span>,
-  },
-  {
-    key: "actions",
-    header: "Aksi",
-    align: "right",
-    cell: (row) => (
-      <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          onClick={() => onTransfer(row)}
-          disabled={row.status === "Keluar"}
-          title={row.status === "Keluar" ? "Siswa sudah keluar dari kelas ini" : undefined}
-        >
-          Pindahkan
-        </button>
-        <button
-          type="button"
-          className="btn btn-danger-soft btn-sm"
-          disabled={row.status === "Keluar"}
-          title={row.status === "Keluar" ? "Siswa sudah keluar dari kelas ini" : undefined}
-        >
-          Keluarkan
-        </button>
-      </div>
-    ),
-  },
-]
+const MEMBER_STATUS_BADGE: Readonly<Record<MemberStatus, string>> = {
+  Aktif: "badge-beres",
+  Cuti: "badge-berjalan",
+  Keluar: "badge-tindakan",
+}
 
-export function ClassMembers() {
-  const [classId, setClassId] = useState(ACTIVE_CLASSES[0].id)
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [transfer, setTransfer] = useState<{ readonly student?: ClassMember } | null>(null)
-  const room = ACTIVE_CLASSES.find((candidate) => candidate.id === classId) ?? ACTIVE_CLASSES[0]
-  const members = MEMBERS_BY_CLASS[room.id] ?? []
-  const rows: readonly Row[] = members.map((member, index) => ({
-    ...member,
-    number: index + 1,
-  }))
+type Row = MemberRow & { readonly number: number }
 
-  const facts = [
-    { label: "Pengajar", value: room.teacher },
-    { label: "Level", value: `Deutsch ${room.level}` },
-    { label: "Jadwal", value: scheduleLabel(room) },
-    { label: "Kapasitas", value: `${capacityLabel(room)} Siswa` },
+const formatScore = (value: number | null) =>
+  value === null ? DASH : value.toLocaleString("id-ID", { maximumFractionDigits: 1 })
+
+const LEFT_REASON = "Siswa sudah keluar dari kelas ini"
+
+function columnsFor(
+  canEdit: boolean,
+  onTransfer: (member: MemberRow) => void,
+  onRemove: (member: MemberRow) => void,
+): readonly DataColumn<Row>[] {
+  const columns: DataColumn<Row>[] = [
+    {
+      key: "number",
+      header: "No",
+      cell: (row) => <span className="tabular text-muted">{row.number}</span>,
+    },
+    {
+      key: "nis",
+      header: "NIS",
+      sort: (row) => row.nis ?? "",
+      cell: (row) => <span className="tabular">{row.nis ?? DASH}</span>,
+    },
+    {
+      key: "name",
+      header: "Nama Siswa",
+      sort: (row) => row.fullName,
+      cell: (row) => <span style={{ fontWeight: 600 }}>{row.fullName}</span>,
+    },
+    {
+      key: "attendance",
+      header: "Kehadiran (%)",
+      sort: (row) => row.attendanceRate ?? -1,
+      align: "right",
+      cell: (row) =>
+        row.attendanceRate === null ? (
+          <span className="text-faint">{DASH}</span>
+        ) : (
+          <span className={`tabular${row.attendanceRate < LOW_ATTENDANCE ? " text-danger" : ""}`}>
+            {Math.round(row.attendanceRate)}%
+          </span>
+        ),
+    },
+    {
+      key: "averageScore",
+      header: "Nilai Rata-rata",
+      sort: (row) => row.averageScore ?? -1,
+      align: "right",
+      cell: (row) => <span className="tabular">{formatScore(row.averageScore)}</span>,
+    },
+    {
+      key: "lastChapter",
+      header: "Bab Terakhir",
+      sort: (row) => row.lastChapter ?? "",
+      cell: (row) => row.lastChapter ?? DASH,
+    },
+    {
+      key: "status",
+      header: "Status",
+      sort: (row) => row.status,
+      cell: (row) => (
+        <span className={`badge ${MEMBER_STATUS_BADGE[row.status]}`}>{row.status}</span>
+      ),
+    },
   ]
+  if (!canEdit) return columns
+  return [
+    ...columns,
+    {
+      key: "actions",
+      header: "Aksi",
+      align: "right",
+      cell: (row) => {
+        const hasLeft = row.status === "Keluar"
+        return (
+          <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => onTransfer(row)}
+              disabled={hasLeft}
+              title={hasLeft ? LEFT_REASON : undefined}
+            >
+              Pindahkan
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger-soft btn-sm"
+              onClick={() => onRemove(row)}
+              disabled={hasLeft}
+              title={hasLeft ? LEFT_REASON : undefined}
+            >
+              Keluarkan
+            </button>
+          </div>
+        )
+      },
+    },
+  ]
+}
+
+export function ClassMembers({ canEdit }: { canEdit: boolean }) {
+  const classes = useRead(activeClassesQuery())
+  const [classId, setClassId] = useUrlParam("class", "")
+
+  if (classes.isError) {
+    return <QueryError message={classes.error.message} onRetry={() => void classes.refetch()} />
+  }
+  if (classes.isPending) return <MembersSkeleton />
+
+  const activeClasses = classes.data.data
+  const room = activeClasses.find((candidate) => candidate.id === classId) ?? activeClasses[0]
+  if (!room) {
+    return (
+      <section className="card">
+        <p className="body-sm text-muted">
+          Belum ada kelas berstatus Aktif. Aktifkan kelas di tab Master Kelas supaya anggotanya
+          dapat diatur di sini.
+        </p>
+      </section>
+    )
+  }
 
   return (
     <div className="stack">
@@ -123,68 +161,115 @@ export function ClassMembers() {
         <div className="row row-between row-wrap" style={{ alignItems: "flex-end" }}>
           <Select
             label="Pilih kelas aktif"
-            aria-label="Pilih kelas aktif"
             size="sm"
             w={260}
             allowDeselect={false}
+            searchable
             comboboxProps={{ position: "bottom-start" }}
-            data={ACTIVE_CLASSES.map((candidate) => ({
+            data={activeClasses.map((candidate) => ({
               value: candidate.id,
               label: classLabel(candidate),
             }))}
             value={room.id}
             onChange={(value) => value && setClassId(value)}
           />
-          <dl className="row row-wrap" style={{ gap: 24, margin: 0 }}>
-            {facts.map(({ label, value }) => (
-              <div key={label} className="stack" style={{ gap: 2 }}>
-                <dt className="caption text-muted">{label}</dt>
-                <dd className="body-sm" style={{ fontWeight: 600, margin: 0 }}>
-                  {value}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <Facts
+            items={[
+              { label: "Pengajar", value: room.teacher?.name ?? "Belum ada" },
+              { label: "Level", value: `Deutsch ${room.level.name}` },
+              { label: "Jadwal", value: room.schedule },
+              { label: "Kapasitas", value: `${capacityLabel(room)} Siswa` },
+            ]}
+          />
         </div>
       </section>
 
-      <section className="card stack">
+      <MembersTable key={room.id} room={room} canEdit={canEdit} />
+    </div>
+  )
+}
+
+type Dialog =
+  | { readonly kind: "add" }
+  | { readonly kind: "transfer"; readonly student?: MemberRow }
+  | { readonly kind: "remove"; readonly student: MemberRow }
+
+function MembersTable({ room, canEdit }: { room: ClassRow; canEdit: boolean }) {
+  const members = useRead(classMembersQuery(room.id))
+  const [dialog, setDialog] = useState<Dialog | null>(null)
+  const close = () => setDialog(null)
+
+  if (members.isError) {
+    return <QueryError message={members.error.message} onRetry={() => void members.refetch()} />
+  }
+
+  const memberRows = members.data?.data ?? []
+  const movable = memberRows.filter((member) => member.status !== "Keluar")
+  const rows: readonly Row[] = memberRows.map((member, index) => ({ ...member, number: index + 1 }))
+
+  return (
+    <section className="card stack">
+      {members.isPending ? (
+        <ClassTableSkeleton />
+      ) : (
         <DataTable
           rows={rows}
-          columns={columnsFor((member) => setTransfer({ student: member }))}
-          rowKey={(row) => row.nis}
-          emptyText={`Belum ada siswa di ${room.name}. Tambahkan lewat tombol di bawah tabel.`}
+          columns={columnsFor(
+            canEdit,
+            (student) => setDialog({ kind: "transfer", student }),
+            (student) => setDialog({ kind: "remove", student }),
+          )}
+          rowKey={(row) => `${row.studentId}-${row.joinedOn}`}
+          emptyText={`Belum ada siswa di ${room.name}.${canEdit ? " Tambahkan lewat tombol di bawah tabel." : ""}`}
         />
+      )}
+
+      {canEdit && (
         <div className="row row-wrap" style={{ gap: 8 }}>
-          <button type="button" className="btn btn-primary" onClick={() => setIsAddOpen(true)}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setDialog({ kind: "add" })}
+          >
             + Tambah Siswa ke Kelas
           </button>
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => setTransfer({})}
-            disabled={members.length === 0}
-            title={members.length === 0 ? `Belum ada siswa di ${room.name}` : undefined}
+            onClick={() => setDialog({ kind: "transfer" })}
+            disabled={movable.length === 0}
+            title={
+              movable.length === 0
+                ? `Belum ada siswa yang dapat dipindahkan dari ${room.name}`
+                : undefined
+            }
           >
             Pindahkan Siswa Massal
           </button>
         </div>
-      </section>
+      )}
 
-      <AddMembersModal
-        key={`add-${room.id}-${isAddOpen}`}
-        opened={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
-        room={room}
-      />
-      <TransferModal
-        key={`move-${room.id}-${transfer?.student?.nis ?? "bulk"}-${transfer !== null}`}
-        opened={transfer !== null}
-        onClose={() => setTransfer(null)}
-        room={room}
-        members={members}
-        student={transfer?.student}
-      />
+      {dialog?.kind === "add" && <AddMembersModal room={room} onClose={close} />}
+      {dialog?.kind === "transfer" && (
+        <TransferModal room={room} members={movable} student={dialog.student} onClose={close} />
+      )}
+      {dialog?.kind === "remove" && (
+        <RemoveMemberModal room={room} student={dialog.student} onClose={close} />
+      )}
+    </section>
+  )
+}
+
+function MembersSkeleton() {
+  return (
+    <div className="stack" aria-busy="true">
+      <span className="sr-only" role="status">
+        Memuat
+      </span>
+      <Skeleton height={88} radius="md" aria-hidden />
+      <section className="card">
+        <ClassTableSkeleton />
+      </section>
     </div>
   )
 }

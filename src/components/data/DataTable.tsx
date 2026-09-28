@@ -1,32 +1,21 @@
 "use client"
 
+import { SegmentedControl } from "@mantine/core"
 import { useMemo, useState } from "react"
-import { ActionIcon, Group, NativeSelect, SegmentedControl, Text } from "@mantine/core"
-import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  ArrowDown01Icon,
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
-  ArrowUp01Icon,
-  ArrowUpDownIcon,
-} from "@hugeicons/core-free-icons"
 
-export type DataColumn<T> = {
-  readonly key: string
-  readonly header: string
-  readonly cell: (row: T) => React.ReactNode
-  readonly sort?: (row: T) => string | number
-  readonly align?: "right"
-  readonly wrap?: boolean
-}
+import { PER_PAGE_OPTIONS } from "@/src/lib/list-query"
+
+import { TableFrame, type DataColumn, type TableSort } from "./TableFrame"
+
+export type { DataColumn } from "./TableFrame"
 
 export type DataFilter<T> = {
   readonly value: (row: T) => string
   readonly options: readonly string[]
   readonly allLabel?: string
+  readonly onChange?: (value: string | null) => void
 }
 
-const PAGE_SIZES = [10, 25, 50] as const
 const ALL = "__all__"
 
 export function DataTable<T>({
@@ -43,14 +32,13 @@ export function DataTable<T>({
   rowKey: (row: T) => string
   filter?: DataFilter<T>
   defaultSort?: { key: string; dir: "asc" | "desc" }
-  /** Kolom terakhir (biasanya Aksi) menempel di kanan saat tabel menggulir mendatar. */
   stickyLast?: boolean
   emptyText?: string
 }) {
   const [filterValue, setFilterValue] = useState<string>(ALL)
-  const [sort, setSort] = useState(defaultSort ?? null)
-  const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0])
-  const [page, setPage] = useState(0)
+  const [sort, setSort] = useState<TableSort>(defaultSort ?? null)
+  const [pageSize, setPageSize] = useState<number>(PER_PAGE_OPTIONS[0])
+  const [page, setPage] = useState(1)
 
   const visible = useMemo(() => {
     const filtered =
@@ -68,13 +56,8 @@ export function DataTable<T>({
   }, [rows, columns, filter, filterValue, sort])
 
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize))
-  const current = Math.min(page, pageCount - 1)
-  const start = current * pageSize
-  const pageRows = visible.slice(start, start + pageSize)
-
-  function toggleSort(key: string) {
-    setSort((s) => (s?.key === key && s.dir === "asc" ? { key, dir: "desc" } : { key, dir: "asc" }))
-  }
+  const current = Math.min(page, pageCount)
+  const start = (current - 1) * pageSize
 
   return (
     <div className="stack">
@@ -86,7 +69,8 @@ export function DataTable<T>({
             value={filterValue}
             onChange={(v) => {
               setFilterValue(v)
-              setPage(0)
+              setPage(1)
+              filter.onChange?.(v === ALL ? null : v)
             }}
             data={[
               { label: filter.allLabel ?? "Semua", value: ALL },
@@ -96,123 +80,28 @@ export function DataTable<T>({
         </div>
       )}
 
-      <div className="table-scroll">
-        <table className={stickyLast ? "table table-sticky-last" : "table"}>
-          <thead>
-            <tr>
-              {columns.map((c) => {
-                const active = sort?.key === c.key
-                const icon = !active
-                  ? ArrowUpDownIcon
-                  : sort.dir === "asc"
-                    ? ArrowUp01Icon
-                    : ArrowDown01Icon
-                return (
-                  <th
-                    key={c.key}
-                    scope="col"
-                    className={c.align === "right" ? "numeric" : undefined}
-                    aria-sort={
-                      active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined
-                    }
-                  >
-                    {c.sort ? (
-                      <button
-                        type="button"
-                        className="table-sort"
-                        onClick={() => toggleSort(c.key)}
-                      >
-                        {c.header}
-                        <HugeiconsIcon icon={icon} size={14} strokeWidth={1.5} />
-                      </button>
-                    ) : (
-                      c.header
-                    )}
-                  </th>
-                )
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="wrap text-muted"
-                  style={{ textAlign: "center" }}
-                >
-                  {emptyText}
-                </td>
-              </tr>
-            ) : (
-              pageRows.map((r) => (
-                <tr key={rowKey(r)}>
-                  {columns.map((c) => (
-                    <td
-                      key={c.key}
-                      className={
-                        [c.align === "right" ? "numeric tabular" : "", c.wrap ? "wrap" : ""]
-                          .filter(Boolean)
-                          .join(" ") || undefined
-                      }
-                    >
-                      {c.cell(r)}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="table-foot">
-        <Group gap="xs" wrap="nowrap">
-          <Text size="13px" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-            Baris per halaman
-          </Text>
-          <NativeSelect
-            size="xs"
-            radius="xl"
-            aria-label="Baris per halaman"
-            value={String(pageSize)}
-            onChange={(e) => {
-              setPageSize(Number(e.currentTarget.value))
-              setPage(0)
-            }}
-            data={PAGE_SIZES.map(String)}
-          />
-        </Group>
-
-        <Group gap="xs" wrap="nowrap">
-          <Text size="13px" c="dimmed" className="tabular" style={{ whiteSpace: "nowrap" }}>
-            {visible.length === 0
-              ? "0 dari 0"
-              : `${start + 1}-${Math.min(start + pageSize, visible.length)} dari ${visible.length}`}
-          </Text>
-          <ActionIcon
-            variant="default"
-            size="md"
-            aria-label="Halaman sebelumnya"
-            disabled={current === 0}
-            onClick={() => setPage(current - 1)}
-          >
-            <HugeiconsIcon icon={ArrowLeft01Icon} size={16} strokeWidth={1.5} />
-          </ActionIcon>
-          <Text size="13px" fw={500} className="tabular">
-            {current + 1}
-          </Text>
-          <ActionIcon
-            variant="default"
-            size="md"
-            aria-label="Halaman berikutnya"
-            disabled={current >= pageCount - 1}
-            onClick={() => setPage(current + 1)}
-          >
-            <HugeiconsIcon icon={ArrowRight01Icon} size={16} strokeWidth={1.5} />
-          </ActionIcon>
-        </Group>
-      </div>
+      <TableFrame
+        rows={visible.slice(start, start + pageSize)}
+        columns={columns}
+        rowKey={rowKey}
+        isSortable={(c) => c.sort !== undefined}
+        sort={sort}
+        onSort={(key) =>
+          setSort((s) =>
+            s?.key === key && s.dir === "asc" ? { key, dir: "desc" } : { key, dir: "asc" },
+          )
+        }
+        page={current}
+        pageSize={pageSize}
+        total={visible.length}
+        onPage={setPage}
+        onPageSize={(size) => {
+          setPageSize(size)
+          setPage(1)
+        }}
+        stickyLast={stickyLast}
+        emptyText={emptyText}
+      />
     </div>
   )
 }

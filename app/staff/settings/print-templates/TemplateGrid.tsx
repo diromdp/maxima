@@ -1,57 +1,63 @@
 "use client"
 
-import { Upload02Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { notify } from "@/src/lib/notify"
+import { Skeleton } from "@mantine/core"
 
-import { TEMPLATES } from "./sample"
+import { QueryError } from "@/src/components/data/QueryError"
+import { previewHref, printTemplatesQuery } from "@/src/entities/print-template/queries"
+import { useRead } from "@/src/lib/api/use-read"
+import { formatDate } from "@/src/lib/format"
 
+export const TEMPLATE_COUNT = 4
 const PAPER_LINES = 5
 
-/**
- * Kartu per template: pratinjau mini, nama, berkas, tombol Preview yang membuka
- * PDF-nya di tab baru, dan ikon ganti berkas (hanya tombol - fase slicing).
- */
 export function TemplateGrid() {
+  const templates = useRead(printTemplatesQuery())
+
+  if (templates.isError) {
+    return <QueryError message={templates.error.message} onRetry={() => void templates.refetch()} />
+  }
+
+  if (templates.isPending) return <TemplateGridSkeleton />
+
   return (
     <div className="grid-3">
-      {TEMPLATES.map((t) => (
-        <article key={t.id} className="card stack">
-          <Paper title={t.name} />
+      {templates.data.data.map((template) => (
+        <article key={template.code} className="card stack">
+          <Paper title={template.name} />
 
           <div className="stack" style={{ gap: 2 }}>
-            <h2 className="h6">{t.name}</h2>
-            <span className="caption text-muted">{t.file}</span>
+            <h2 className="h6">{template.name}</h2>
+            <span className="caption text-muted">{template.fileName}</span>
+            <span className="caption text-faint">Diubah {formatDate(template.updatedOn)}</span>
           </div>
 
-          <div className="row">
-            <a
-              className="btn btn-secondary btn-sm"
-              style={{ flex: 1 }}
-              href={`/files/${t.file}`}
-              target="_blank"
-              rel="noopener"
-            >
-              Preview
-            </a>
-            <button
-              type="button"
-              className="btn btn-ghost btn-icon btn-sm"
-              aria-label={`Ganti berkas ${t.name}`}
-              title="Ganti berkas"
-              onClick={() => notify.info(`Unggah versi baru ${t.name} belum tersedia.`)}
-            >
-              <HugeiconsIcon icon={Upload02Icon} size={16} strokeWidth={1.5} />
-            </button>
-          </div>
+          <a
+            className="btn btn-secondary btn-sm"
+            href={previewHref(template.code)}
+            target="_blank"
+            rel="noopener"
+          >
+            Preview
+          </a>
         </article>
       ))}
     </div>
   )
 }
 
-// Pratinjau mini: selembar "kertas" dengan judul dan baris-baris redup, supaya
-// kartu terbaca sebagai dokumen, bukan kotak kosong.
+export function TemplateGridSkeleton() {
+  return (
+    <div className="grid-3" aria-busy="true">
+      <span className="sr-only" role="status">
+        Memuat
+      </span>
+      {Array.from({ length: TEMPLATE_COUNT }, (_, index) => (
+        <Skeleton key={index} height={320} radius="md" aria-hidden />
+      ))}
+    </div>
+  )
+}
+
 function Paper({ title }: { title: string }) {
   return (
     <div
@@ -83,12 +89,12 @@ function Paper({ title }: { title: string }) {
         <span className="text-ink" style={{ fontSize: 10, fontWeight: 600, lineHeight: 1.2 }}>
           {title}
         </span>
-        {Array.from({ length: PAPER_LINES }, (_, i) => (
+        {Array.from({ length: PAPER_LINES }, (_, line) => (
           <span
-            key={i}
+            key={line}
             style={{
               height: 4,
-              width: `${90 - ((i * 23) % 40)}%`,
+              width: `${90 - ((line * 23) % 40)}%`,
               background: "var(--color-hairline)",
               borderRadius: 2,
             }}

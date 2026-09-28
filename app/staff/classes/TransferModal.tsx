@@ -1,107 +1,102 @@
 "use client"
 
 import { Checkbox, Group, Modal, Select, Textarea } from "@mantine/core"
-import { useState } from "react"
+import { schemaResolver, useForm } from "@mantine/form"
 
 import { Notice } from "@/src/components/ui/Notice"
-import { notify } from "@/src/lib/notify"
-
+import { transferClassMembers } from "@/src/entities/class/actions"
+import { activeClassesQuery } from "@/src/entities/class/queries"
 import {
   capacityLabel,
   classLabel,
-  CLASSES,
-  type ClassMember,
-  type ClassRoom,
   seatsLeft,
-} from "./sample"
+  transferFormSchema,
+  type ClassRow,
+  type MemberRow,
+  type TransferForm,
+} from "@/src/entities/class/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { DASH } from "@/src/lib/format"
+import { useActionForm } from "@/src/lib/use-action-form"
 
-const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
-
-const movable = (member: ClassMember) => member.status !== "Keluar"
+import { CapacityWarning, Facts, MEMBER_INVALIDATIONS, TITLE_STYLE } from "./DialogParts"
 
 export function TransferModal({
-  opened,
-  onClose,
   room,
   members,
   student,
+  onClose,
 }: {
-  opened: boolean
+  room: ClassRow
+  members: readonly MemberRow[]
+  student?: MemberRow
   onClose: () => void
-  room: ClassRoom
-  members: readonly ClassMember[]
-  student?: ClassMember
 }) {
-  const [selected, setSelected] = useState<string[]>(student ? [student.nis] : [])
-  const [targetId, setTargetId] = useState<string | null>(null)
-  const [isOverloadAccepted, setIsOverloadAccepted] = useState(false)
+  const classes = useRead(activeClassesQuery())
+  const targets = (classes.data?.data ?? []).filter((candidate) => candidate.id !== room.id)
+  const form = useForm<TransferForm>({
+    initialValues: {
+      studentIds: student ? [student.studentId] : [],
+      targetClassId: "",
+      reason: "",
+      isOverCapacityConfirmed: false,
+    },
+    validate: schemaResolver(transferFormSchema, { sync: true }),
+  })
+  const target = targets.find((candidate) => candidate.id === form.values.targetClassId)
+  const chosen = form.values.studentIds.length
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) => transferClassMembers(room.id, values),
+    successMessage: `${chosen} siswa dipindahkan dari ${room.name} ke ${target?.name ?? "kelas tujuan"}.`,
+    invalidates: MEMBER_INVALIDATIONS,
+    onSuccess: onClose,
+  })
 
-  const targets = CLASSES.filter(
-    (candidate) => candidate.id !== room.id && candidate.status === "Aktif",
-  )
-  const target = targets.find((candidate) => candidate.id === targetId)
-  const overflow = target ? selected.length - seatsLeft(target) : 0
-  const isOverCapacity = overflow > 0
-  const canSubmit =
-    selected.length > 0 && target !== undefined && (!isOverCapacity || isOverloadAccepted)
-
+  const seats = target ? seatsLeft(target) : 0
+  const isOverCapacity = target !== undefined && chosen > seats
   const blockedReason = !target
     ? "Pilih dulu kelas tujuan"
-    : selected.length === 0
+    : chosen === 0
       ? "Pilih dulu siswa yang akan dipindahkan"
-      : isOverCapacity && !isOverloadAccepted
+      : isOverCapacity && !form.values.isOverCapacityConfirmed
         ? "Centang persetujuan melebihi kapasitas dulu"
         : undefined
 
   return (
     <Modal
-      opened={opened}
+      opened
       onClose={onClose}
-      title={student ? `Pindahkan ${student.name}` : "Pindahkan Siswa Massal"}
+      title={student ? `Pindahkan ${student.fullName}` : "Pindahkan Siswa Massal"}
       size="lg"
       styles={TITLE_STYLE}
     >
-      <form
-        className="stack stack-lg"
-        onSubmit={(event) => {
-          event.preventDefault()
-          notify.success(
-            `${selected.length} siswa dipindahkan dari ${room.name} ke ${target?.name}.`,
-          )
-          onClose()
-        }}
-        onReset={onClose}
-      >
+      <form className="stack stack-lg" onSubmit={submit} noValidate>
+        {formError && <Notice tone="danger">{formError}</Notice>}
+
         {student ? (
-          <dl className="row row-wrap" style={{ gap: 24, margin: 0 }}>
-            {[
-              { label: "NIS", value: student.nis },
+          <Facts
+            items={[
+              { label: "NIS", value: student.nis ?? DASH },
               { label: "Kelas asal", value: classLabel(room) },
-              { label: "Bab terakhir", value: student.lastChapter },
-            ].map(({ label, value }) => (
-              <div key={label} className="stack" style={{ gap: 2 }}>
-                <dt className="caption text-muted">{label}</dt>
-                <dd className="body-sm" style={{ fontWeight: 600, margin: 0 }}>
-                  {value}
-                </dd>
-              </div>
-            ))}
-          </dl>
+              { label: "Bab terakhir", value: student.lastChapter ?? DASH },
+            ]}
+          />
         ) : (
           <Checkbox.Group
             label={`Siswa ${room.name}`}
             description="Siswa berstatus Keluar tidak bisa dipindahkan."
-            value={selected}
-            onChange={setSelected}
+            {...form.getInputProps("studentIds")}
           >
             <div className="stack" style={{ gap: 12, marginBlockStart: 12 }}>
               {members.map((member) => (
                 <Checkbox
-                  key={member.nis}
-                  value={member.nis}
-                  label={member.name}
-                  description={`NIS ${member.nis} · ${member.lastChapter} · ${member.status}`}
-                  disabled={!movable(member)}
+                  key={member.studentId}
+                  value={member.studentId}
+                  label={member.fullName}
+                  description={[`NIS ${member.nis ?? DASH}`, member.lastChapter, member.status]
+                    .filter(Boolean)
+                    .join(" · ")}
                 />
               ))}
             </div>
@@ -110,54 +105,51 @@ export function TransferModal({
 
         <Select
           label="Kelas tujuan"
-          placeholder="Pilih kelas aktif"
+          placeholder={classes.isPending ? "Memuat kelas" : "Pilih kelas aktif"}
           data={targets.map((candidate) => ({
             value: candidate.id,
             label: `${classLabel(candidate)} - ${capacityLabel(candidate)}`,
           }))}
-          value={targetId}
-          onChange={setTargetId}
+          nothingFoundMessage="Tidak ada kelas aktif lain."
+          searchable
+          withAsterisk
           comboboxProps={{ position: "bottom-start" }}
-          required
+          {...form.getInputProps("targetClassId")}
+          error={classes.isError ? classes.error.message : form.errors.targetClassId}
         />
 
         <Textarea
-          name="note"
           label="Alasan pemindahan"
           description="Tercatat di log aktivitas kelas asal dan kelas tujuan."
           placeholder="Contoh: naik level setelah lulus ujian A2."
           autosize
           minRows={2}
+          withAsterisk
+          {...form.getInputProps("reason")}
         />
 
         {isOverCapacity && target && (
-          <Notice tone="warning" title="Melebihi kapasitas kelas tujuan">
-            <div className="stack" style={{ gap: 8 }}>
-              <span>
-                {target.name} tinggal {Math.max(seatsLeft(target), 0)} kursi, sedang yang
-                dipindahkan {selected.length} siswa. Kelebihan {overflow} siswa butuh persetujuan
-                Anda.
-              </span>
-              <Checkbox
-                label="Saya tetap memindahkan siswa melebihi kapasitas."
-                checked={isOverloadAccepted}
-                onChange={(event) => setIsOverloadAccepted(event.currentTarget.checked)}
-              />
-            </div>
-          </Notice>
+          <CapacityWarning
+            className={target.name}
+            seats={seats}
+            chosen={chosen}
+            checked={form.values.isOverCapacityConfirmed}
+            onChange={(checked) => form.setFieldValue("isOverCapacityConfirmed", checked)}
+            consent="Saya tetap memindahkan siswa melebihi kapasitas."
+          />
         )}
 
         <Group justify="flex-end">
-          <button type="reset" className="btn btn-secondary">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
             Batal
           </button>
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={!canSubmit}
+            disabled={blockedReason !== undefined || isPending}
             title={blockedReason}
           >
-            Pindahkan {selected.length > 0 ? `${selected.length} Siswa` : "Siswa"}
+            {isPending ? "Menyimpan..." : `Pindahkan ${chosen > 0 ? `${chosen} Siswa` : "Siswa"}`}
           </button>
         </Group>
       </form>

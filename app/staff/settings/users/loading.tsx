@@ -1,6 +1,6 @@
 import { Skeleton } from "@mantine/core"
 
-import { ROLES, USERS } from "./sample"
+import { TableSkeleton } from "@/src/components/data/TableSkeleton"
 
 export default function Loading() {
   return (
@@ -16,25 +16,17 @@ export default function Loading() {
 
       <section className="card stack" aria-hidden>
         <Skeleton height={24} width="30%" radius="xl" />
-        <div className="grid-3">
-          <Skeleton height={40} radius="xl" />
-          <Skeleton height={40} radius="xl" />
-          <Skeleton height={40} radius="xl" />
+        <div className="row row-wrap" style={{ gap: 8 }}>
+          <Skeleton height={36} width={320} radius="xl" />
+          <Skeleton height={36} width={160} radius="xl" />
+          <Skeleton height={36} width={160} radius="xl" />
         </div>
-        <div className="stack stack-sm">
-          {USERS.map((u) => (
-            <Skeleton key={u.id} height={44} radius="sm" />
-          ))}
-        </div>
+        <TableSkeleton columns={6} />
       </section>
 
       <section className="card stack" aria-hidden>
         <Skeleton height={24} width="20%" radius="xl" />
-        <div className="stack stack-sm">
-          {ROLES.map((r) => (
-            <Skeleton key={r.name} height={44} radius="sm" />
-          ))}
-        </div>
+        <TableSkeleton columns={5} rows={7} />
       </section>
     </div>
   )

@@ -2,27 +2,50 @@
 
 import { Cancel01Icon, Download04Icon, Tick02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { Skeleton } from "@mantine/core"
 import Link from "next/link"
 import { useState } from "react"
 
+import { QueryError } from "@/src/components/data/QueryError"
+import { PageHeader } from "@/src/components/layout/PageHeader"
 import { Notice } from "@/src/components/ui/Notice"
+import { placementQuery } from "@/src/entities/placement/queries"
+import {
+  cityStateOf,
+  type DepartureDocument,
+  type DepartureFile,
+  PLACEMENT_STATUS_BADGE,
+  type PlacementDetail,
+  VISA_STATUS_BADGE,
+} from "@/src/entities/placement/schema"
+import { openStoredObject } from "@/src/lib/api/download"
+import { ApiError } from "@/src/lib/api/errors"
+import { useRead } from "@/src/lib/api/use-read"
 import { DASH, formatDateLong } from "@/src/lib/format"
+import { formatMoney, idr } from "@/src/lib/money"
 import { notify } from "@/src/lib/notify"
 
-import {
-  ALUMNI_STATUS_BADGE,
-  type Alumnus,
-  alumnusStatus,
-  DEPARTURE_CHECKLIST,
-  type PlacementData,
-  VISA_STATUS_BADGE,
-  type VisaData,
-  visaStatus,
-} from "../sample"
 import { AlumniEditModal, type EditSection } from "./AlumniEditModal"
+import { DepartureUploadModal } from "./DepartureUploadModal"
 
 const dateOrDash = (value: string | null) => (value ? formatDateLong(value) : DASH)
-const textOrDash = (value: string | null) => (value && value !== "" ? value : DASH)
+const textOrDash = (value: string | null) => value || DASH
+
+const BACK_LINK = (
+  <Link href="/staff/visa-placement" className="btn btn-secondary">
+    Kembali ke Daftar
+  </Link>
+)
+
+async function openDocument(document: DepartureDocument) {
+  if (!document.objectKey) return
+  try {
+    await openStoredObject(document.objectKey)
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error
+    notify.error(error.message)
+  }
+}
 
 function Panel({
   title,
@@ -59,41 +82,85 @@ function Rows({ rows }: { rows: readonly { label: string; value: React.ReactNode
   )
 }
 
-export function AlumniDetail({ initial, readOnly }: { initial: Alumnus; readOnly: boolean }) {
-  const [alumnus, setAlumnus] = useState(initial)
-  const [section, setSection] = useState<EditSection | null>(null)
-  const status = alumnusStatus(alumnus)
-  const visa = visaStatus(alumnus.visa)
-  const checked = alumnus.checklist.length
-  const proposalCount = Object.keys(alumnus.proposal ?? {}).length
+function DetailSkeleton() {
+  return (
+    <div className="stack stack-lg" aria-busy="true">
+      <span className="sr-only" role="status">
+        Memuat
+      </span>
+      <div className="stack stack-sm" aria-hidden>
+        <Skeleton height={32} width="30%" radius="xl" />
+        <Skeleton height={16} width="60%" radius="xl" />
+      </div>
+      <Skeleton height={68} radius="md" aria-hidden />
+      <div className="grid-2" aria-hidden>
+        {Array.from({ length: 4 }, (_, index) => (
+          <Skeleton key={index} height={320} radius="md" />
+        ))}
+      </div>
+    </div>
+  )
+}
 
-  const save = (edited: EditSection, nextVisa: VisaData, nextPlacement: PlacementData) => {
-    setAlumnus((current) => ({
-      ...current,
-      visa: edited === "visa" ? nextVisa : current.visa,
-      placement: edited === "placement" ? nextPlacement : current.placement,
-      proposal: null,
-    }))
-    notify.success(edited === "visa" ? "Proses visa tersimpan." : "Data penempatan tersimpan.")
+export function AlumniDetail({ nis, canEdit }: { nis: string; canEdit: boolean }) {
+  const detail = useRead(placementQuery(nis))
+
+  if (detail.isError) {
+    return (
+      <div className="stack stack-lg">
+        <PageHeader title="Detail Alumni" actions={BACK_LINK} />
+        <QueryError message={detail.error.message} onRetry={() => void detail.refetch()} />
+      </div>
+    )
   }
+  if (!detail.data) return <DetailSkeleton />
+  return <AlumniDetailBody detail={detail.data} canEdit={canEdit} />
+}
 
-  const editButton = (target: EditSection) =>
-    readOnly ? null : (
-      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSection(target)}>
+function AlumniDetailBody({ detail, canEdit }: { detail: PlacementDetail; canEdit: boolean }) {
+  const [section, setSection] = useState<EditSection | null>(null)
+  const [uploading, setUploading] = useState<DepartureFile | null>(null)
+  const { student, values, checklist } = detail
+  const visaLock =
+    detail.visaGate?.status === "Belum Terbuka"
+      ? `Layanan Pengajuan Visa belum terbuka, kurang ${formatMoney(idr(detail.visaGate.shortfallIdr))}.`
+      : null
+
+  const editButton = (target: EditSection, lock: string | null = null) =>
+    canEdit ? (
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        disabled={lock !== null}
+        title={lock ?? undefined}
+        onClick={() => setSection(target)}
+      >
         Ubah
       </button>
-    )
+    ) : null
 
   return (
     <div className="stack stack-lg">
+      <PageHeader
+        title={[student.anrede, student.name].filter(Boolean).join(" ")}
+        badge={
+          <span className={`badge ${PLACEMENT_STATUS_BADGE[detail.status]}`}>{detail.status}</span>
+        }
+        subtitle="Detail visa, penempatan, berkas, dan checklist keberangkatan. Tanggal yang tersimpan di sini adalah versi yang berlaku."
+        actions={BACK_LINK}
+      />
+
       <section className="card">
         <dl className="row row-wrap" style={{ gap: 24, margin: 0 }}>
           {[
-            { label: "NIS", value: alumnus.nis },
-            { label: "No Kontrak", value: alumnus.contractNumber },
-            { label: "Cabang", value: alumnus.branch },
-            { label: "Program", value: `${alumnus.program} ${alumnus.intakeYear}` },
-            { label: "Jurusan", value: alumnus.field },
+            { label: "NIS", value: student.nis },
+            { label: "No Kontrak", value: detail.contract.contractNumber ?? "Belum terbit" },
+            { label: "Cabang", value: detail.branch?.name ?? DASH },
+            {
+              label: "Program",
+              value: `${detail.program?.name ?? DASH} ${detail.contract.cohort}`,
+            },
+            { label: "Jurusan", value: textOrDash(values.fieldOfStudy) },
           ].map(({ label, value }) => (
             <div key={label} className="stack" style={{ gap: 2 }}>
               <dt className="caption text-muted">{label}</dt>
@@ -105,35 +172,39 @@ export function AlumniDetail({ initial, readOnly }: { initial: Alumnus; readOnly
           <div className="stack" style={{ gap: 2 }}>
             <dt className="caption text-muted">Status</dt>
             <dd style={{ margin: 0 }}>
-              <span className={`badge ${ALUMNI_STATUS_BADGE[status]}`}>{status}</span>
+              <span className={`badge ${PLACEMENT_STATUS_BADGE[detail.status]}`}>
+                {detail.status}
+              </span>
             </dd>
           </div>
         </dl>
       </section>
 
-      {proposalCount > 0 && !readOnly && (
+      {detail.pendingProposals > 0 && canEdit && (
         <Notice tone="warning" title="Ada usulan dari siswa">
-          {alumnus.name} mengisi {proposalCount} isian di portalnya yang belum diverifikasi. Buka
-          Ubah pada panel terkait; usulannya ditulis di bawah tiap kolom.
+          {student.name} mengisi {detail.pendingProposals} isian di portalnya yang belum
+          diverifikasi. Buka Ubah pada panel terkait; usulannya ditulis di bawah tiap kolom.
         </Notice>
       )}
 
       <div className="grid-2" style={{ alignItems: "start" }}>
         <div className="stack">
-          <Panel title="I. Proses Visa (Keputusan Jerman)" action={editButton("visa")}>
+          <Panel title="I. Proses Visa (Keputusan Jerman)" action={editButton("visa", visaLock)}>
+            {visaLock && canEdit && <span className="caption text-muted">{visaLock}</span>}
             <Rows
               rows={[
-                { label: "Tanggal Pengajuan Visa", value: dateOrDash(alumnus.visa.appliedAt) },
-                {
-                  label: "Tanggal Wawancara Kedutaan",
-                  value: dateOrDash(alumnus.visa.interviewAt),
-                },
-                { label: "Tanggal Visa Terbit", value: dateOrDash(alumnus.visa.issuedAt) },
-                { label: "Jenis Visa", value: textOrDash(alumnus.visa.type) },
-                { label: "Masa Berlaku Visa", value: textOrDash(alumnus.visa.validity) },
+                { label: "Tanggal Pengajuan Visa", value: dateOrDash(values.visaAppliedOn) },
+                { label: "Tanggal Wawancara Kedutaan", value: dateOrDash(values.visaInterviewOn) },
+                { label: "Tanggal Visa Terbit", value: dateOrDash(values.visaIssuedOn) },
+                { label: "Jenis Visa", value: textOrDash(values.visaKind) },
+                { label: "Masa Berlaku Visa", value: textOrDash(values.visaValidity) },
                 {
                   label: "Status",
-                  value: <span className={`badge ${VISA_STATUS_BADGE[visa]}`}>{visa}</span>,
+                  value: (
+                    <span className={`badge ${VISA_STATUS_BADGE[detail.visaStatus]}`}>
+                      {detail.visaStatus}
+                    </span>
+                  ),
                 },
               ]}
             />
@@ -142,22 +213,13 @@ export function AlumniDetail({ initial, readOnly }: { initial: Alumnus; readOnly
           <Panel title="II. Data Penempatan (Jerman)" action={editButton("placement")}>
             <Rows
               rows={[
-                { label: "Perusahaan / Betrieb", value: textOrDash(alumnus.placement.company) },
-                { label: "Sekolah (Berufsschule)", value: textOrDash(alumnus.placement.school) },
-                { label: "Jurusan Ausbildung", value: textOrDash(alumnus.placement.major) },
-                { label: "Kota / Bundesland", value: textOrDash(alumnus.placement.cityState) },
-                {
-                  label: "Tanggal Mulai Kontrak",
-                  value: dateOrDash(alumnus.placement.contractStart),
-                },
-                {
-                  label: "Tanggal Selesai Kontrak",
-                  value: dateOrDash(alumnus.placement.contractEnd),
-                },
-                {
-                  label: "Tanggal Keberangkatan",
-                  value: dateOrDash(alumnus.placement.departureAt),
-                },
+                { label: "Perusahaan / Betrieb", value: textOrDash(values.company) },
+                { label: "Sekolah (Berufsschule)", value: textOrDash(values.school) },
+                { label: "Jurusan Ausbildung", value: textOrDash(values.fieldOfStudy) },
+                { label: "Kota / Bundesland", value: cityStateOf(values) ?? DASH },
+                { label: "Tanggal Mulai Kontrak", value: dateOrDash(values.contractStartsOn) },
+                { label: "Tanggal Selesai Kontrak", value: dateOrDash(values.contractEndsOn) },
+                { label: "Tanggal Keberangkatan", value: dateOrDash(values.departureOn) },
               ]}
             />
             <span className="caption text-muted">
@@ -170,44 +232,65 @@ export function AlumniDetail({ initial, readOnly }: { initial: Alumnus; readOnly
           <Panel
             title="III. Berkas Alumni"
             action={
-              <Link href={`/staff/documents/${alumnus.nis}`} className="btn btn-ghost btn-sm">
+              <Link
+                href={`/staff/documents/${encodeURIComponent(student.nis)}`}
+                className="btn btn-ghost btn-sm"
+              >
                 Buka Dokumen
               </Link>
             }
           >
             <span className="caption text-muted">
-              Dibaca dari halaman Dokumen; tidak ada unggahan di sini.
+              Visa, Kontrak Kerja (Vertrag), Krankenversicherung, dan Rahmenplan diunggah di sini
+              dan langsung berstatus Lengkap. Berkas lain dibaca dari halaman Dokumen.
             </span>
             <ul className="list-rows" style={{ margin: 0, padding: 0, listStyle: "none" }}>
-              {alumnus.files.map((file) => (
-                <li
-                  key={file.label}
-                  className="row row-between"
-                  style={{ gap: 12, paddingBlock: 8 }}
-                >
-                  <span className="body-sm">{file.label}</span>
-                  {file.fileName ? (
-                    <button
-                      type="button"
-                      className="link row"
-                      style={{
-                        fontSize: 14,
-                        gap: 4,
-                        background: "none",
-                        border: 0,
-                        padding: 0,
-                        cursor: "pointer",
-                      }}
-                      onClick={() => notify.info(`${file.fileName} disiapkan untuk diunduh.`)}
-                    >
-                      <HugeiconsIcon icon={Download04Icon} size={14} strokeWidth={1.5} />
-                      {file.fileName}
-                    </button>
-                  ) : (
-                    <span className="badge badge-tindakan">Belum ada</span>
-                  )}
-                </li>
-              ))}
+              {detail.files.map((file) => {
+                const stored = file.documents.filter((document) => document.objectKey)
+                return (
+                  <li
+                    key={file.label}
+                    className="row row-between row-wrap"
+                    style={{ gap: 12, paddingBlock: 8 }}
+                  >
+                    <span className="body-sm">{file.label}</span>
+                    <div className="row row-wrap" style={{ gap: 8, justifyContent: "flex-end" }}>
+                      {stored.length === 0 ? (
+                        <span className="badge badge-tindakan">Belum ada</span>
+                      ) : (
+                        stored.map((document) => (
+                          <button
+                            key={document.code}
+                            type="button"
+                            className="link row"
+                            style={{
+                              fontSize: 14,
+                              gap: 4,
+                              background: "none",
+                              border: 0,
+                              padding: 0,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => void openDocument(document)}
+                          >
+                            <HugeiconsIcon icon={Download04Icon} size={14} strokeWidth={1.5} />
+                            {document.originalName ?? document.name}
+                          </button>
+                        ))
+                      )}
+                      {canEdit && file.isUploadable && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setUploading(file)}
+                        >
+                          {stored.length > 0 ? "Ganti" : "Unggah"}
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
             </ul>
           </Panel>
 
@@ -215,9 +298,9 @@ export function AlumniDetail({ initial, readOnly }: { initial: Alumnus; readOnly
             title="IV. Checklist Mandiri Keberangkatan"
             action={
               <span
-                className={`badge tabular ${checked === DEPARTURE_CHECKLIST.length ? "badge-beres" : "badge-berjalan"}`}
+                className={`badge tabular ${checklist.checked === checklist.total ? "badge-beres" : "badge-berjalan"}`}
               >
-                {checked}/{DEPARTURE_CHECKLIST.length}
+                {checklist.checked}/{checklist.total}
               </span>
             }
           >
@@ -225,35 +308,49 @@ export function AlumniDetail({ initial, readOnly }: { initial: Alumnus; readOnly
               Data ini diisi sendiri oleh siswa melalui Portal Siswa. Di sini hanya dibaca, tidak
               dapat dicentang.
             </Notice>
-            <ul className="list-rows" style={{ margin: 0, padding: 0, listStyle: "none" }}>
-              {DEPARTURE_CHECKLIST.map((item) => {
-                const isChecked = alumnus.checklist.includes(item)
-                return (
-                  <li key={item} className="row" style={{ gap: 10, paddingBlock: 8 }}>
-                    <span className={isChecked ? "text-success" : "text-faint"} aria-hidden>
+            {checklist.items.length === 0 ? (
+              <span className="body-sm text-muted">
+                Belum ada butir checklist aktif di Master Data.
+              </span>
+            ) : (
+              <ul className="list-rows" style={{ margin: 0, padding: 0, listStyle: "none" }}>
+                {checklist.items.map((item) => (
+                  <li key={item.code} className="row" style={{ gap: 10, paddingBlock: 8 }}>
+                    <span className={item.isChecked ? "text-success" : "text-faint"} aria-hidden>
                       <HugeiconsIcon
-                        icon={isChecked ? Tick02Icon : Cancel01Icon}
+                        icon={item.isChecked ? Tick02Icon : Cancel01Icon}
                         size={16}
                         strokeWidth={2}
                       />
                     </span>
-                    <span className={`body-sm ${isChecked ? "" : "text-muted"}`}>{item}</span>
-                    <span className="sr-only">{isChecked ? "sudah" : "belum"}</span>
+                    <span className={`body-sm ${item.isChecked ? "" : "text-muted"}`}>
+                      {item.name}
+                    </span>
+                    <span className="sr-only">{item.isChecked ? "sudah" : "belum"}</span>
                   </li>
-                )
-              })}
-            </ul>
+                ))}
+              </ul>
+            )}
           </Panel>
         </div>
       </div>
 
-      <AlumniEditModal
-        key={`${section ?? "closed"}-${alumnus.nis}`}
-        alumnus={alumnus}
-        section={section}
-        onClose={() => setSection(null)}
-        onSave={save}
-      />
+      {section && (
+        <AlumniEditModal
+          key={section}
+          detail={detail}
+          section={section}
+          onClose={() => setSection(null)}
+        />
+      )}
+      {uploading && (
+        <DepartureUploadModal
+          key={uploading.label}
+          detail={detail}
+          file={uploading}
+          onClose={() => setUploading(null)}
+        />
+      )}
     </div>
   )
 }

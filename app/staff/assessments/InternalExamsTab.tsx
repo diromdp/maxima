@@ -1,48 +1,66 @@
 "use client"
 
+import { saveScoreSheet } from "@/src/entities/assessment/actions"
+import {
+  type AssessmentSheet,
+  averageOf,
+  EXAM_COLUMNS,
+  EXAM_STATUS_BADGE,
+  examStatusOf,
+  formatScore,
+  isBelowKkm,
+  type SheetKey,
+  isFormerMember,
+} from "@/src/entities/assessment/schema"
+
+import { KkmMissingNotice } from "./KkmMissingNotice"
 import { SaveBar } from "./SaveBar"
 import { ScoreCell } from "./ScoreCell"
-import {
-  type AssessmentClass,
-  average,
-  EXAM_SCORES,
-  examColumnsFor,
-  formatScore,
-  KKM,
-  PASS_RULES,
-  type Student,
-  STUDENTS_BY_CLASS,
-} from "./sample"
-import { useScoreSheet } from "./useScoreSheet"
+import { useSheetDraft } from "./useSheetDraft"
+import { SheetStudentName } from "./SheetStudentName"
 
-type ExamStatus = "Lulus" | "Tidak Lulus" | "Belum Lengkap"
+const BASE_EXAM_COUNT = 5
 
-const STATUS_BADGE: Readonly<Record<ExamStatus, string>> = {
-  Lulus: "badge-beres",
-  "Tidak Lulus": "badge-tindakan",
-  "Belum Lengkap": "badge-terkunci",
-}
+const columnOf = (key: string) => EXAM_COLUMNS[key] ?? { label: key, short: key }
 
-const statusOf = (rowAverage: number | null, isComplete: boolean): ExamStatus => {
-  if (!isComplete || rowAverage === null) return "Belum Lengkap"
-  return rowAverage >= KKM ? "Lulus" : "Tidak Lulus"
-}
-
-export function InternalExamsTab({ room, readOnly }: { room: AssessmentClass; readOnly: boolean }) {
-  const students: readonly Student[] = STUDENTS_BY_CLASS[room.id] ?? []
-  const columns = examColumnsFor(room.level)
-  const { scoreOf, isDirty, setScore, dirtyCount, save } = useScoreSheet(EXAM_SCORES[room.id] ?? {})
+export function InternalExamsTab({
+  sheet,
+  sheetKey,
+  readOnly,
+}: {
+  sheet: AssessmentSheet
+  sheetKey: SheetKey
+  readOnly: boolean
+}) {
+  const { kkm, examKeys, students } = sheet
+  const draft = useSheetDraft<number>({
+    sheetKey,
+    serverValueOf: (studentId, key) =>
+      students.find((student) => student.studentId === studentId)?.exams[key] ?? null,
+    save: (changes) =>
+      saveScoreSheet("exams", {
+        ...sheetKey,
+        version: sheet.versions.exams,
+        rows: Object.entries(changes).map(([studentId, values]) => ({ studentId, values })),
+      }),
+    successMessage: "Nilai ujian tersimpan.",
+  })
 
   const rows = students.map((student) => {
-    const scores = columns.map((column) => scoreOf(student.nis, column.key))
-    const rowAverage = average(scores)
-    const isComplete = scores.every((score) => score !== null)
-    return { student, rowAverage, status: statusOf(rowAverage, isComplete) }
+    if (!draft.isRowDirty(student.studentId)) {
+      return { student, rowAverage: student.examAverage, status: student.examStatus }
+    }
+    const values = examKeys.map((key) => draft.valueOf(student.studentId, key))
+    return { student, rowAverage: averageOf(values), status: examStatusOf(values, kkm) }
   })
-  const graded = rows.filter((row) => row.status !== "Belum Lengkap")
+  const graded = rows.filter((row) => row.status === "Lulus" || row.status === "Tidak Lulus")
   const passed = graded.filter((row) => row.status === "Lulus").length
-  const classAverage = average(graded.map((row) => row.rowAverage))
+  const classAverage = averageOf(graded.map((row) => row.rowAverage))
   const passRate = students.length === 0 ? null : passed / students.length
+  const examsRule =
+    examKeys.length > BASE_EXAM_COUNT
+      ? "Rata-rata Großtest, empat Endtest, dan tiga Simulasi"
+      : "Rata-rata Großtest dan empat Endtest"
 
   return (
     <div className="stack">
@@ -53,7 +71,7 @@ export function InternalExamsTab({ room, readOnly }: { room: AssessmentClass; re
             <span className="h3">{formatScore(classAverage)}</span>
           </div>
           <div className="stack" style={{ gap: 2 }}>
-            <span className="caption text-muted">Tingkat kelulusan (KKM {KKM})</span>
+            <span className="caption text-muted">Tingkat kelulusan (KKM {kkm ?? "-"})</span>
             <span className="row" style={{ gap: 8, alignItems: "baseline" }}>
               <span className="h3 text-success">
                 {passRate === null ? "-" : `${Math.round(passRate * 100)}%`}
@@ -66,24 +84,26 @@ export function InternalExamsTab({ room, readOnly }: { room: AssessmentClass; re
           <div className="stack" style={{ gap: 4 }}>
             <span className="caption text-muted">Aturan kelulusan</span>
             <ol className="body-sm" style={{ margin: 0, paddingLeft: 18 }}>
-              {PASS_RULES.map((rule) => (
-                <li key={rule}>{rule}</li>
-              ))}
+              <li>
+                {examsRule} minimal {kkm ?? "sesuai KKM level"} (KKM).
+              </li>
+              <li>Siswa Tidak Lulus diarahkan ke Perlu Remedial di tab Deskripsi &amp; Catatan.</li>
             </ol>
           </div>
         </div>
       </section>
+
+      {kkm === null && <KkmMissingNotice />}
 
       <section className="card">
         <div className="table-scroll">
           <table className="table">
             <thead>
               <tr>
-                <th>NIS</th>
                 <th>Nama Siswa</th>
-                {columns.map((column) => (
-                  <th key={column.key} style={{ textAlign: "right" }} title={column.label}>
-                    {column.short}
+                {examKeys.map((key) => (
+                  <th key={key} style={{ textAlign: "right" }} title={columnOf(key).label}>
+                    {columnOf(key).short}
                   </th>
                 ))}
                 <th style={{ textAlign: "right" }}>Rata-rata</th>
@@ -93,29 +113,35 @@ export function InternalExamsTab({ room, readOnly }: { room: AssessmentClass; re
             </thead>
             <tbody>
               {rows.map(({ student, rowAverage, status }) => (
-                <tr key={student.nis}>
-                  <td className="tabular text-muted">{student.nis}</td>
-                  <td style={{ fontWeight: 600 }}>{student.name}</td>
-                  {columns.map((column) => (
-                    <td key={column.key} className="numeric" style={{ padding: "6px 4px" }}>
+                <tr key={student.studentId}>
+                  <td style={{ fontWeight: 600 }}>
+                    <SheetStudentName student={student} />
+                  </td>
+                  {examKeys.map((key) => (
+                    <td key={key} className="numeric" style={{ padding: "6px 4px" }}>
                       <ScoreCell
-                        value={scoreOf(student.nis, column.key)}
-                        isDirty={isDirty(student.nis, column.key)}
-                        readOnly={readOnly}
-                        label={`${column.label} ${student.name}`}
-                        onChange={(value) => setScore(student.nis, column.key, value)}
+                        value={draft.valueOf(student.studentId, key)}
+                        kkm={kkm}
+                        isDirty={draft.isDirty(student.studentId, key)}
+                        readOnly={readOnly || isFormerMember(student)}
+                        label={`${columnOf(key).label} ${student.name}`}
+                        onChange={(value) => draft.setValue(student.studentId, key, value)}
                       />
                     </td>
                   ))}
                   <td
-                    className={`numeric ${rowAverage !== null && rowAverage < KKM ? "text-danger" : ""}`}
+                    className={`numeric ${isBelowKkm(rowAverage, kkm) ? "text-danger" : ""}`}
                     style={{ fontWeight: 700 }}
                   >
                     {formatScore(rowAverage)}
                   </td>
-                  <td className="numeric text-muted">{KKM}</td>
+                  <td className="numeric text-muted">{kkm ?? "-"}</td>
                   <td>
-                    <span className={`badge ${STATUS_BADGE[status]}`}>{status}</span>
+                    {status ? (
+                      <span className={`badge ${EXAM_STATUS_BADGE[status]}`}>{status}</span>
+                    ) : (
+                      <span className="text-faint">-</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -125,11 +151,12 @@ export function InternalExamsTab({ room, readOnly }: { room: AssessmentClass; re
       </section>
 
       <SaveBar
-        dirtyCount={dirtyCount}
+        dirtyCount={draft.dirtyCount}
         unit="nilai"
         label="Simpan Nilai Ujian"
         readOnly={readOnly}
-        onSave={save}
+        isPending={draft.isPending}
+        onSave={() => void draft.submit()}
       />
     </div>
   )

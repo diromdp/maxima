@@ -2,29 +2,32 @@
 
 import { useState } from "react"
 
-import { formatScore, KKM, type Score } from "./sample"
+import { formatScore, isBelowKkm } from "@/src/entities/assessment/schema"
+
+type Score = number | null
 
 export function ScoreCell({
   value,
+  kkm,
   isDirty,
   readOnly,
   label,
   onChange,
 }: {
   value: Score
+  kkm: number | null
   isDirty: boolean
   readOnly: boolean
   label: string
   onChange: (value: Score) => void
 }) {
   const [draft, setDraft] = useState<string | null>(null)
-  const isBelow = value !== null && value < KKM
-  const tone = isBelow ? "bg-danger-bg text-danger" : ""
+  const tone = isBelowKkm(value, kkm) ? "bg-danger-bg text-danger" : ""
 
   const commit = () => {
     if (draft === null) return
     const trimmed = draft.trim()
-    const parsed = trimmed === "" ? null : Math.min(100, Math.max(0, Number(trimmed)))
+    const parsed = trimmed === "" ? null : Math.min(100, Math.max(0, Math.round(Number(trimmed))))
     if (parsed === null || Number.isFinite(parsed)) onChange(parsed)
     setDraft(null)
   }

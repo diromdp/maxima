@@ -2,29 +2,27 @@
 
 import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { Checkbox, SegmentedControl } from "@mantine/core"
+import { Checkbox, SegmentedControl, Skeleton } from "@mantine/core"
 import dayjs, { type Dayjs } from "dayjs"
 import { useState } from "react"
 
+import { QueryError } from "@/src/components/data/QueryError"
+import { activeClassesQuery, classCalendarQuery } from "@/src/entities/class/queries"
+import { classLabel, type CalendarEntry } from "@/src/entities/class/schema"
+import { useRead } from "@/src/lib/api/use-read"
 import { formatDate } from "@/src/lib/format"
 
-import {
-  CALENDAR_CLASS_IDS,
-  CALENDAR_START,
-  type CalendarEvent,
-  classLabel,
-  CLASSES,
-  EVENT_KINDS,
-  EVENTS,
-} from "./sample"
-
 type View = "month" | "week"
+
+const EVENT_KINDS = [
+  { kind: "class", label: "Kelas Aktif", badge: "badge-info" },
+  { kind: "exam", label: "Ujian", badge: "badge-neutral-solid" },
+] as const
 
 const WEEKDAYS = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"]
 const DAY_KEY = "YYYY-MM-DD"
 const MONTH_TITLE = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" })
-const FILTER_CLASSES = CLASSES.filter((room) => CALENDAR_CLASS_IDS.includes(room.id))
-const BADGE_BY_KIND = Object.fromEntries(EVENT_KINDS.map(({ kind, badge }) => [kind, badge]))
+const CALENDAR_HEIGHT = 480
 
 const mondayOf = (date: Dayjs) => date.subtract((date.day() + 6) % 7, "day")
 
@@ -45,26 +43,37 @@ function periodTitle(anchor: Dayjs, view: View) {
   return `${formatDate(monday.toDate())} - ${formatDate(monday.add(6, "day").toDate())}`
 }
 
-const isVisible = (event: CalendarEvent, selected: ReadonlySet<string>) =>
-  !event.classId || selected.has(event.classId)
+const titleOf = (entry: CalendarEntry) =>
+  entry.kind === "class" ? `Sesi ${entry.className} (${entry.levelName})` : entry.name
+
+const keyOf = (entry: CalendarEntry) =>
+  entry.kind === "class" ? `class-${entry.classId}` : `exam-${entry.name}-${entry.levelName}`
 
 export function AcademicCalendar() {
   const [view, setView] = useState<View>("month")
-  const [anchor, setAnchor] = useState(() => dayjs(CALENDAR_START))
-  const [selected, setSelected] = useState<ReadonlySet<string>>(
-    () => new Set(FILTER_CLASSES.map((room) => room.id)),
-  )
+  const [anchor, setAnchor] = useState(() => dayjs())
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set())
 
   const days = daysOf(anchor, view)
   const weeks = Array.from({ length: days.length / 7 }, (_, index) =>
     days.slice(index * 7, index * 7 + 7),
   )
   const today = dayjs().format(DAY_KEY)
-  const isAllSelected = selected.size === FILTER_CLASSES.length
-  const visibleEvents = EVENTS.filter((event) => isVisible(event, selected))
+  const classes = useRead(activeClassesQuery())
+  const calendar = useRead(
+    classCalendarQuery(days[0]!.format(DAY_KEY), days.at(-1)!.format(DAY_KEY)),
+  )
+  const filterClasses = classes.data?.data ?? []
+  const isAllSelected = hidden.size === 0
+  const shownLevels = new Set(
+    filterClasses.filter((room) => !hidden.has(room.id)).map((room) => room.level.name),
+  )
+  const visibleEvents = (calendar.data?.data ?? []).filter((entry) =>
+    entry.kind === "class" ? !hidden.has(entry.classId) : shownLevels.has(entry.levelName),
+  )
 
   const toggleClass = (id: string) =>
-    setSelected((current) => {
+    setHidden((current) => {
       const next = new Set(current)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -125,81 +134,105 @@ export function AcademicCalendar() {
 
           <div className="stack stack-sm">
             <h3 className="caption text-muted">Filter Kelas</h3>
-            <Checkbox
-              size="sm"
-              label="Semua Kelas"
-              checked={isAllSelected}
-              indeterminate={!isAllSelected && selected.size > 0}
-              onChange={() =>
-                setSelected(
-                  isAllSelected ? new Set() : new Set(FILTER_CLASSES.map((room) => room.id)),
-                )
-              }
-            />
-            {FILTER_CLASSES.map((room) => (
-              <Checkbox
-                key={room.id}
-                size="sm"
-                label={classLabel(room)}
-                checked={selected.has(room.id)}
-                onChange={() => toggleClass(room.id)}
-              />
-            ))}
+            {classes.isPending ? (
+              <Skeleton height={80} radius="sm" aria-hidden />
+            ) : filterClasses.length === 0 ? (
+              <span className="caption text-muted">Belum ada kelas berstatus Aktif.</span>
+            ) : (
+              <>
+                <Checkbox
+                  size="sm"
+                  label="Semua Kelas"
+                  checked={isAllSelected}
+                  indeterminate={!isAllSelected && hidden.size < filterClasses.length}
+                  onChange={() =>
+                    setHidden(
+                      isAllSelected ? new Set(filterClasses.map((room) => room.id)) : new Set(),
+                    )
+                  }
+                />
+                {filterClasses.map((room) => (
+                  <Checkbox
+                    key={room.id}
+                    size="sm"
+                    label={classLabel(room)}
+                    checked={!hidden.has(room.id)}
+                    onChange={() => toggleClass(room.id)}
+                  />
+                ))}
+              </>
+            )}
           </div>
         </aside>
 
-        <div className="table-scroll">
-          <table className={`calendar${view === "week" ? " calendar-week" : ""}`}>
-            <thead>
-              <tr>
-                {WEEKDAYS.map((weekday) => (
-                  <th key={weekday} scope="col">
-                    {weekday}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {weeks.map((week) => (
-                <tr key={week[0].format(DAY_KEY)}>
-                  {week.map((day) => {
-                    const key = day.format(DAY_KEY)
-                    const events = visibleEvents.filter((event) => event.date === key)
-                    const isOutside = view === "month" && !day.isSame(anchor, "month")
-                    return (
-                      <td
-                        key={key}
-                        className={
-                          [
-                            isOutside ? "calendar-day-outside" : "",
-                            key === today ? "calendar-day-today" : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ") || undefined
-                        }
-                      >
-                        <span
-                          className="calendar-date tabular"
-                          aria-label={formatDate(day.toDate())}
-                        >
-                          {day.date()}
-                        </span>
-                        {events.map((event) => (
-                          <span
-                            key={`${key}-${event.title}`}
-                            className={`badge ${BADGE_BY_KIND[event.kind]} calendar-event`}
-                          >
-                            {event.title}
-                          </span>
-                        ))}
-                      </td>
-                    )
-                  })}
+        {calendar.isError ? (
+          <QueryError message={calendar.error.message} onRetry={() => void calendar.refetch()} />
+        ) : calendar.isPending ? (
+          <div aria-busy="true">
+            <span className="sr-only" role="status">
+              Memuat
+            </span>
+            <Skeleton height={CALENDAR_HEIGHT} radius="md" aria-hidden />
+          </div>
+        ) : (
+          <div className="table-scroll">
+            <table className={`calendar${view === "week" ? " calendar-week" : ""}`}>
+              <thead>
+                <tr>
+                  {WEEKDAYS.map((weekday) => (
+                    <th key={weekday} scope="col">
+                      {weekday}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {weeks.map((week) => (
+                  <tr key={week[0].format(DAY_KEY)}>
+                    {week.map((day) => {
+                      const key = day.format(DAY_KEY)
+                      const events = visibleEvents.filter((event) => event.date === key)
+                      const isOutside = view === "month" && !day.isSame(anchor, "month")
+                      return (
+                        <td
+                          key={key}
+                          className={
+                            [
+                              isOutside ? "calendar-day-outside" : "",
+                              key === today ? "calendar-day-today" : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ") || undefined
+                          }
+                        >
+                          <span
+                            className="calendar-date tabular"
+                            aria-label={formatDate(day.toDate())}
+                          >
+                            {day.date()}
+                          </span>
+                          {events.map((event) => (
+                            <span
+                              key={`${key}-${keyOf(event)}`}
+                              className={`badge ${EVENT_KINDS.find(({ kind }) => kind === event.kind)?.badge} calendar-event`}
+                              title={
+                                event.kind === "class"
+                                  ? `${event.startTime}-${event.endTime}`
+                                  : undefined
+                              }
+                            >
+                              {titleOf(event)}
+                            </span>
+                          ))}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

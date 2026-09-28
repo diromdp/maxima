@@ -2,35 +2,44 @@ import { Upload04Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Anchor, Badge, Box, Button, FileButton, Group, Stack, Text } from "@mantine/core"
 
-import { formatFileSize } from "@/src/lib/format"
 import { Notice } from "@/src/components/ui/Notice"
+import { UPLOAD_ACCEPT } from "@/src/lib/upload"
 
-import {
-  ACCEPTED_DOCUMENT_TYPES,
-  DOCUMENTS,
-  MAX_DOCUMENT_SIZE,
-  REQUIRED_DOCUMENT_COUNT,
-  type DocumentKey,
-} from "../data"
+export type DocumentSlot = {
+  code: string
+  name: string
+  required: boolean
+  fileName: string | null
+  isUploaded: boolean
+  error: string | null
+}
 
-type Documents = Record<DocumentKey, File | null>
+const statusOf = (slot: DocumentSlot, isBusy: boolean) =>
+  isBusy
+    ? { label: "Mengunggah", tone: "badge-berjalan" }
+    : slot.isUploaded
+      ? { label: "Terunggah", tone: "badge-beres" }
+      : { label: "Belum", tone: "badge-tindakan" }
 
 export function Step5Documents({
-  documents,
-  onChange,
+  slots,
+  busyCode = null,
+  onSelect,
 }: {
-  documents: Documents
-  onChange: (key: DocumentKey, file: File | null) => void
+  slots: readonly DocumentSlot[]
+  busyCode?: string | null
+  onSelect: (code: string, file: File | null) => void
 }) {
-  const uploadedRequired = DOCUMENTS.filter((d) => d.required && documents[d.key]).length
-  const allRequiredDone = uploadedRequired === REQUIRED_DOCUMENT_COUNT
+  const required = slots.filter((slot) => slot.required)
+  const uploadedRequired = required.filter((slot) => slot.isUploaded).length
+  const allRequiredDone = uploadedRequired === required.length
 
   return (
     <Stack gap="md">
       <Group justify="space-between">
         <Text size="sm" c="dimmed">
-          Tiap dokumen wajib. Format PDF atau JPG, maksimal 5 MB per berkas. Unggah berkas asli,
-          bukan tautan Google Drive.
+          Format PDF, JPG, atau PNG, maksimal 5 MB per berkas. Unggah berkas asli, bukan tautan
+          Google Drive.
         </Text>
         <Anchor href="#" size="sm" onClick={(e) => e.preventDefault()}>
           <Group gap={4} wrap="nowrap">
@@ -41,15 +50,12 @@ export function Step5Documents({
       </Group>
 
       <Stack gap="xs">
-        {DOCUMENTS.map((doc) => {
-          const file = documents[doc.key]
-          const invalid =
-            file !== null &&
-            (!ACCEPTED_DOCUMENT_TYPES.includes(file.type) || file.size > MAX_DOCUMENT_SIZE)
-
+        {slots.map((slot) => {
+          const isBusy = busyCode === slot.code
+          const status = statusOf(slot, isBusy)
           return (
             <Box
-              key={doc.key}
+              key={slot.code}
               className="row-soft"
               p="md"
               style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}
@@ -57,41 +63,46 @@ export function Step5Documents({
               <Group justify="space-between" align="center" wrap="nowrap" w="100%">
                 <Stack gap={2} style={{ flex: 1 }}>
                   <Text fw={500}>
-                    {doc.label}
-                    {!doc.required && (
+                    {slot.name}
+                    {!slot.required && (
                       <Text component="span" size="xs" c="dimmed">
                         {" "}
                         (opsional)
                       </Text>
                     )}
                   </Text>
-                  {file && (
+                  {slot.fileName && (
                     <Text size="xs" c="dimmed">
-                      {file.name} · {formatFileSize(file.size)}
+                      {slot.fileName}
                     </Text>
                   )}
                 </Stack>
 
-                <Group justify="flex-end" w={96} ml="auto">
-                  <Badge className={`badge ${file && !invalid ? "badge-beres" : "badge-tindakan"}`}>
-                    {file && !invalid ? "Terunggah" : "Belum"}
-                  </Badge>
+                <Group justify="flex-end" w={112} ml="auto">
+                  <Badge className={`badge ${status.tone}`}>{status.label}</Badge>
                 </Group>
 
                 <FileButton
-                  onChange={(f) => onChange(doc.key, f)}
-                  accept={ACCEPTED_DOCUMENT_TYPES.join(",")}
+                  onChange={(file) => onSelect(slot.code, file)}
+                  accept={UPLOAD_ACCEPT}
+                  disabled={busyCode !== null}
                 >
                   {(props) => (
-                    <Button {...props} variant={file ? "outline" : "filled"} size="sm" w={96}>
-                      {file ? "Ganti" : "Unggah"}
+                    <Button
+                      {...props}
+                      variant={slot.isUploaded ? "outline" : "filled"}
+                      size="sm"
+                      w={96}
+                      loading={isBusy}
+                    >
+                      {slot.isUploaded ? "Ganti" : "Unggah"}
                     </Button>
                   )}
                 </FileButton>
               </Group>
-              {invalid && (
+              {slot.error && (
                 <Text size="xs" c="tindakan">
-                  Berkas melebihi 5 MB atau bukan PDF/JPG — unggah ulang.
+                  {slot.error}
                 </Text>
               )}
             </Box>
@@ -99,12 +110,10 @@ export function Step5Documents({
         })}
       </Stack>
 
-      <Notice tone="info">Format PDF atau JPG, maksimal 5 MB per berkas.</Notice>
-
       <Notice tone={allRequiredDone ? "success" : "danger"}>
         {allRequiredDone
-          ? `${REQUIRED_DOCUMENT_COUNT} dari ${REQUIRED_DOCUMENT_COUNT} dokumen wajib sudah lengkap.`
-          : `${uploadedRequired} dari ${REQUIRED_DOCUMENT_COUNT} dokumen wajib sudah diunggah, ${REQUIRED_DOCUMENT_COUNT - uploadedRequired} lagi.`}
+          ? `${required.length} dari ${required.length} dokumen wajib sudah lengkap.`
+          : `${uploadedRequired} dari ${required.length} dokumen wajib sudah diunggah, ${required.length - uploadedRequired} lagi.`}
       </Notice>
     </Stack>
   )

@@ -1,78 +1,45 @@
 "use client"
 
-import { Search01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Select, TextInput } from "@mantine/core"
-import { useState } from "react"
+import { ListFilter } from "@/src/components/data/ListFilter"
+import { ListSearch } from "@/src/components/data/ListSearch"
+import { QueryError } from "@/src/components/data/QueryError"
+import { documentsQuery } from "@/src/entities/document/queries"
+import { DOCUMENT_FILTERS, VERIFICATION_OPTIONS } from "@/src/entities/document/schema"
+import { useMasterOptions } from "@/src/entities/master-data/use-master-options"
+import { useRead } from "@/src/lib/api/use-read"
+import { useListParams } from "@/src/lib/use-list-params"
 
-import { BRANCHES, PROGRAMS, STUDENTS, waitingCount } from "./sample"
 import { StudentIndex } from "./StudentIndex"
 
-const WAITING_FILTER = ["Ada yang menunggu", "Tidak ada yang menunggu"] as const
-
 export function DocumentsWorkspace() {
-  const [branch, setBranch] = useState<string | null>(null)
-  const [program, setProgram] = useState<string | null>(null)
-  const [waiting, setWaiting] = useState<string | null>(null)
-  const [query, setQuery] = useState("")
-
-  const students = STUDENTS.filter(
-    (student) =>
-      (!branch || student.branch === branch) &&
-      (!program || student.program === program) &&
-      (!waiting ||
-        (waiting === WAITING_FILTER[0]
-          ? waitingCount(student) > 0
-          : waitingCount(student) === 0)) &&
-      (query === "" ||
-        `${student.name} ${student.nis}`.toLowerCase().includes(query.toLowerCase())),
-  )
-  const totalWaiting = students.reduce((count, student) => count + waitingCount(student), 0)
-  const studentsWaiting = students.filter((student) => waitingCount(student) > 0).length
+  const { params } = useListParams(DOCUMENT_FILTERS)
+  const documents = useRead(documentsQuery(params))
+  const { branches, programs } = useMasterOptions()
+  const summary = documents.data?.summary
 
   return (
     <div className="stack stack-lg">
       <section className="card">
         <div className="row row-between row-wrap" style={{ alignItems: "flex-end" }}>
-          <TextInput
-            aria-label="Cari siswa"
-            placeholder="Cari nama atau NIS"
-            size="sm"
-            w={260}
-            leftSection={<HugeiconsIcon icon={Search01Icon} size={16} strokeWidth={1.5} />}
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
+          <ListSearch label="Cari nama atau NIS" />
           <div className="row row-wrap" style={{ gap: 8 }}>
-            <Select
-              aria-label="Saring verifikasi"
+            <ListFilter
+              name="verification"
+              label="verifikasi"
               placeholder="Verifikasi: Semua"
-              size="sm"
-              w={210}
-              data={[...WAITING_FILTER]}
-              value={waiting}
-              onChange={setWaiting}
-              clearable
+              options={VERIFICATION_OPTIONS}
             />
-            <Select
-              aria-label="Saring cabang"
+            <ListFilter
+              name="branch"
+              label="cabang"
               placeholder="Cabang: Semua"
-              size="sm"
-              w={160}
-              data={[...BRANCHES]}
-              value={branch}
-              onChange={setBranch}
-              clearable
+              options={branches}
             />
-            <Select
-              aria-label="Saring program"
+            <ListFilter
+              name="program"
+              label="program"
               placeholder="Program: Semua"
-              size="sm"
-              w={170}
-              data={[...PROGRAMS]}
-              value={program}
-              onChange={setProgram}
-              clearable
+              options={programs}
             />
           </div>
         </div>
@@ -87,13 +54,26 @@ export function DocumentsWorkspace() {
               halaman siswa itu.
             </span>
           </div>
-          <span className={`badge tabular ${totalWaiting > 0 ? "badge-berjalan" : "badge-beres"}`}>
-            {totalWaiting > 0
-              ? `${totalWaiting} berkas menunggu di ${studentsWaiting} siswa`
-              : "Tidak ada yang menunggu"}
-          </span>
+          {summary && (
+            <span
+              className={`badge tabular ${summary.pendingDocuments > 0 ? "badge-berjalan" : "badge-beres"}`}
+            >
+              {summary.pendingDocuments > 0
+                ? `${summary.pendingDocuments} berkas menunggu di ${summary.pendingStudents} siswa`
+                : "Tidak ada yang menunggu"}
+            </span>
+          )}
         </div>
-        <StudentIndex students={students} />
+
+        {documents.isError ? (
+          <QueryError message={documents.error.message} onRetry={() => void documents.refetch()} />
+        ) : (
+          <StudentIndex
+            rows={documents.data?.data ?? []}
+            total={documents.data?.meta.total ?? 0}
+            isPending={documents.isPending}
+          />
+        )}
       </section>
     </div>
   )

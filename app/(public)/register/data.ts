@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { PHONE_PATTERN, PHONE_RULE } from "@/src/components/ui/PhoneInput"
+import type { PackageChoice } from "@/src/entities/registration/schema"
 import { eur, formatMoney, idr, subtract, type Money } from "@/src/lib/money"
 
 export type RegistrationPackage = {
@@ -76,73 +78,25 @@ export const PACKAGES: readonly RegistrationPackage[] = [
   },
 ] as const
 
-export const DEFAULT_PACKAGE_ID = "ausbildung-45"
-
-export const packageLabel = (pkg: RegistrationPackage): string =>
-  `${formatMoney(pkg.dp)} · ${pkg.installments} angsuran · ${pkg.durationLabel}`
-
 export const monthlyEstimate = (pkg: RegistrationPackage): Money => {
   const remaining = subtract(pkg.price, pkg.dp)
   return idr(Math.floor(remaining.amount / pkg.installments / 1_000) * 1_000)
 }
 
-export const PROMO_CODE = "MAXIMER625"
-export const PROMO_DISCOUNT: Money = idr(1_500_000)
-
-export function resolvePromo(code: string): { valid: boolean; message: string; discount: Money } {
-  const trimmed = code.trim()
-  if (!trimmed) return { valid: false, message: "", discount: idr(0) }
-  if (trimmed.toUpperCase() === PROMO_CODE) {
-    return {
-      valid: true,
-      message: `${PROMO_CODE} terpakai · potongan ${formatMoney(PROMO_DISCOUNT)}`,
-      discount: PROMO_DISCOUNT,
-    }
-  }
-  return {
-    valid: false,
-    message: "Kode promo tidak ditemukan atau sudah kedaluwarsa.",
-    discount: idr(0),
-  }
-}
-
-export const BRANCHES = ["Bandung"] as const
-
-export const CONSULTANTS = ["Konsultan 1", "Konsultan 2", "Konsultan 3"] as const
-
-export const PROGRAMS = ["Ausbildung", "FSJ", "Studium", "Kursus Bahasa"] as const
 export const INTEREST_FIELDS = ["Pflege", "Gastronomie", "Logistik"] as const
-export const INFO_SOURCES = ["Instagram", "Teman", "Alumni", "Website"] as const
 export const ANREDE_OPTIONS = ["Herr", "Frau"] as const
 export const GENDER_OPTIONS = ["Laki-laki", "Perempuan"] as const
 export const EDUCATION_LEVELS = ["SMA", "SMK", "D3", "S1"] as const
 export const GERMAN_LEVELS = ["Belum pernah", "A1", "A2", "B1", "B2"] as const
 
-export type DocumentKey =
-  | "pasFoto"
-  | "aktaKelahiran"
-  | "kartuKeluarga"
-  | "ktp"
-  | "ijazah"
-  | "transkrip"
-  | "paspor"
-  | "suratKontrak"
-
-export const DOCUMENTS: ReadonlyArray<{ key: DocumentKey; label: string; required: boolean }> = [
-  { key: "pasFoto", label: "Pas Foto Latar Belakang Putih", required: true },
-  { key: "aktaKelahiran", label: "Akta Kelahiran", required: true },
-  { key: "kartuKeluarga", label: "Kartu Keluarga", required: true },
-  { key: "ktp", label: "KTP", required: true },
-  { key: "ijazah", label: "Ijazah Terakhir", required: true },
-  { key: "transkrip", label: "Transkrip Nilai Terakhir", required: true },
-  { key: "paspor", label: "Paspor", required: false },
-  { key: "suratKontrak", label: "Surat Kontrak", required: false },
-]
-
-export const REQUIRED_DOCUMENT_COUNT = DOCUMENTS.filter((d) => d.required).length
-
-export const ACCEPTED_DOCUMENT_TYPES = ["application/pdf", "image/jpeg", "image/jpg"]
-export const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024
+export const choiceLabel = (pkg: PackageChoice): string =>
+  [
+    formatMoney(idr(pkg.dpIdr)),
+    `${pkg.installments} angsuran`,
+    pkg.durationMonths ? `durasi ${pkg.durationMonths} bulan` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ")
 
 export const TERMS_TEXT = [
   "Siswa wajib melunasi biaya kursus sesuai jadwal angsuran pada paket yang dipilih. Keterlambatan pembayaran menunda pembukaan gerbang layanan yang belum tercapai.",
@@ -183,13 +137,13 @@ export type RegistrationValues = {
   height: string
   weight: string
   phonePersonal: string
-  branch: string
+  branchId: string
   program: string
   interestField: string
-  interestMajor: string
+  interestMajorId: string
   packageId: string
-  consultant: string
-  infoSource: string
+  picUserId: string
+  leadSourceId: string
   referrerName: string
   promoCode: string
   whatsapp: string
@@ -205,7 +159,7 @@ export type RegistrationValues = {
   emergencyContactPhone: string
   lastEducationLevel: string
   schoolName: string
-  major: string
+  schoolMajor: string
   graduationYear: string
   averageGrade: string
   germanLevel: string
@@ -230,13 +184,13 @@ export const INITIAL_VALUES: RegistrationValues = {
   height: "",
   weight: "",
   phonePersonal: "",
-  branch: "",
+  branchId: "",
   program: "",
   interestField: "",
-  interestMajor: "",
-  packageId: DEFAULT_PACKAGE_ID,
-  consultant: "",
-  infoSource: "",
+  interestMajorId: "",
+  packageId: "",
+  picUserId: "",
+  leadSourceId: "",
   referrerName: "",
   promoCode: "",
   whatsapp: "",
@@ -252,7 +206,7 @@ export const INITIAL_VALUES: RegistrationValues = {
   emergencyContactPhone: "",
   lastEducationLevel: "",
   schoolName: "",
-  major: "",
+  schoolMajor: "",
   graduationYear: "",
   averageGrade: "",
   germanLevel: "",
@@ -266,6 +220,7 @@ export const INITIAL_VALUES: RegistrationValues = {
 }
 
 const requiredText = (message: string) => z.string().trim().min(1, message)
+const phone = z.string().regex(PHONE_PATTERN, PHONE_RULE)
 
 export const registrationSchema = z
   .object({
@@ -279,29 +234,21 @@ export const registrationSchema = z
     birthDate: requiredText("Tanggal lahir wajib diisi."),
     height: requiredText("Tinggi badan wajib diisi."),
     weight: requiredText("Berat badan wajib diisi."),
-    phonePersonal: z
-      .string()
-      .regex(/^08\d{8,11}$/, "Format nomor HP tidak valid, contoh 08xxxxxxxxx."),
+    phonePersonal: phone,
 
-    branch: requiredText("Cabang wajib dipilih."),
+    branchId: requiredText("Cabang wajib dipilih."),
     program: requiredText("Program wajib dipilih."),
     interestField: requiredText("Bidang yang diminati wajib dipilih."),
-    interestMajor: requiredText("Jurusan yang diminati wajib diisi."),
+    interestMajorId: requiredText("Jurusan yang diminati wajib dipilih."),
     packageId: requiredText("Paket wajib dipilih."),
-    consultant: requiredText("Konsultan wajib dipilih."),
-    infoSource: requiredText("Sumber informasi wajib dipilih."),
+    picUserId: requiredText("Konsultan wajib dipilih."),
+    leadSourceId: requiredText("Sumber informasi wajib dipilih."),
     referrerName: z.string(),
     promoCode: z.string(),
 
-    whatsapp: z
-      .string()
-      .regex(/^08\d{8,11}$/, "Format nomor WhatsApp tidak valid, contoh 08xxxxxxxxx."),
-    phoneMother: z
-      .string()
-      .regex(/^08\d{8,11}$/, "Format nomor HP tidak valid, contoh 08xxxxxxxxx."),
-    phoneFather: z
-      .string()
-      .regex(/^08\d{8,11}$/, "Format nomor HP tidak valid, contoh 08xxxxxxxxx."),
+    whatsapp: phone,
+    phoneMother: phone,
+    phoneFather: phone,
     address: requiredText("Alamat lengkap wajib diisi."),
     village: requiredText("Kelurahan wajib diisi."),
     district: requiredText("Kecamatan wajib diisi."),
@@ -309,13 +256,11 @@ export const registrationSchema = z
     province: requiredText("Provinsi wajib diisi."),
     postalCode: requiredText("Kode pos wajib diisi."),
     emergencyContact: requiredText("Nama dan hubungan kontak darurat wajib diisi."),
-    emergencyContactPhone: z
-      .string()
-      .regex(/^08\d{8,11}$/, "Format nomor HP tidak valid, contoh 08xxxxxxxxx."),
+    emergencyContactPhone: phone,
 
     lastEducationLevel: requiredText("Jenjang pendidikan wajib dipilih."),
     schoolName: requiredText("Asal sekolah atau kampus wajib diisi."),
-    major: requiredText("Jurusan wajib diisi."),
+    schoolMajor: requiredText("Jurusan wajib diisi."),
     graduationYear: requiredText("Tahun lulus wajib diisi."),
     averageGrade: requiredText("Nilai rata-rata rapor wajib diisi."),
     germanLevel: requiredText("Kemampuan bahasa Jerman wajib dipilih."),
@@ -338,19 +283,6 @@ export const registrationSchema = z
     path: ["adminPasswordConfirm"],
   })
 
-export function zodFormResolver(schema: z.ZodType<RegistrationValues>) {
-  return (values: RegistrationValues): Record<string, string> => {
-    const result = schema.safeParse(values)
-    if (result.success) return {}
-    const errors: Record<string, string> = {}
-    for (const issue of result.error.issues) {
-      const path = issue.path.join(".")
-      if (path && !errors[path]) errors[path] = issue.message
-    }
-    return errors
-  }
-}
-
 export const STEP_FIELDS: readonly (keyof RegistrationValues)[][] = [
   [
     "email",
@@ -364,11 +296,18 @@ export const STEP_FIELDS: readonly (keyof RegistrationValues)[][] = [
     "height",
     "weight",
     "phonePersonal",
-  ],
-  ["branch", "program", "interestField", "interestMajor", "packageId", "consultant", "infoSource"],
-  [
-    "phonePersonal",
     "whatsapp",
+  ],
+  [
+    "branchId",
+    "program",
+    "interestField",
+    "interestMajorId",
+    "packageId",
+    "picUserId",
+    "leadSourceId",
+  ],
+  [
     "phoneMother",
     "phoneFather",
     "address",
@@ -380,10 +319,15 @@ export const STEP_FIELDS: readonly (keyof RegistrationValues)[][] = [
     "emergencyContact",
     "emergencyContactPhone",
   ],
-  ["lastEducationLevel", "schoolName", "major", "graduationYear", "averageGrade", "germanLevel"],
+  [
+    "lastEducationLevel",
+    "schoolName",
+    "schoolMajor",
+    "graduationYear",
+    "averageGrade",
+    "germanLevel",
+  ],
   [],
   ["agreeAccurate", "agreeAdmission", "agreeDataUse"],
   ["adminEmail", "adminPassword", "adminPasswordConfirm"],
 ]
-
-export const DRAFT_STORAGE_KEY = "maxima-registration-draft"

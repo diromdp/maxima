@@ -12,8 +12,6 @@ import type { Session } from "@/src/lib/auth/session"
 
 const ALL_BRANCHES = "__all__"
 
-// Cabang yang dikenal PRD baru Bandung (kode kontrak BDG). Daftar ini bertambah
-// dari backend nanti; sekarang cukup untuk memperlihatkan pemilihnya.
 const BRANCHES = ["Bandung"] as const
 
 export function AuthMenu({
@@ -26,14 +24,12 @@ export function AuthMenu({
   menuPosition?: FloatingPosition
 }) {
   const isStaff = session.kind === "staff"
-  // Staf terikat cabang tidak bisa mengganti cakupannya; hanya yang `branches` null
-  // (peran pusat) yang memilih. Pilihan hanya hidup di sesi tampilan ini (fase slicing).
   const locked = isStaff && session.branches !== null
   const [scope, setScope] = useState<string>(locked ? session.branches!.join(", ") : ALL_BRANCHES)
   const scopeLabel = scope === ALL_BRANCHES ? "Semua cabang" : scope
 
   const label = isStaff ? session.role : session.name
-  const sub = isStaff ? scopeLabel : `NIS ${session.id}`
+  const sub = isStaff ? scopeLabel : session.nis ? `NIS ${session.nis}` : session.status
 
   return (
     <Menu
@@ -116,6 +112,14 @@ export function AuthMenu({
                 </Text>
               )}
             </Stack>
+
+            <Menu.Item
+              component={Link}
+              href="/staff/profile"
+              leftSection={<HugeiconsIcon icon={UserAccountIcon} size={16} strokeWidth={1.5} />}
+            >
+              Profil
+            </Menu.Item>
           </>
         ) : (
           <Menu.Item

@@ -1,32 +1,22 @@
 import { Title } from "@mantine/core"
 
 import { Notice } from "@/src/components/ui/Notice"
-import { formatDate } from "@/src/lib/format"
-import { formatMoney } from "@/src/lib/money"
+import { EURO_STATUS, type PortalPayments } from "@/src/entities/portal/schema"
+import { DASH, formatDate } from "@/src/lib/format"
+import { eur, formatMoney } from "@/src/lib/money"
 
-import {
-  EURO_PAYMENTS,
-  type EuroStatus,
-  PACKAGE_PRICE_EUR,
-  pendingEuro,
-  ratifiedEuro,
-  shortfallEuro,
-} from "./payments"
+const euro = (cents: number | null) => (cents === null ? DASH : formatMoney(eur(cents)))
 
-const BADGE: Readonly<Record<EuroStatus, string>> = {
-  Disahkan: "badge-beres",
-  "Menunggu pengesahan": "badge-berjalan",
-}
-
-export function EuroObligation() {
-  const ratified = ratifiedEuro(EURO_PAYMENTS)
-  const pending = pendingEuro(EURO_PAYMENTS)
-  const due = shortfallEuro(EURO_PAYMENTS)
-
+export function EuroObligation({ euro: lane }: { euro: PortalPayments["euro"] }) {
+  const remaining = lane.remainingEurCents ?? 0
   const figures = [
-    { label: "Biaya sisi Jerman", value: formatMoney(PACKAGE_PRICE_EUR), tone: "" },
-    { label: "Sudah disahkan", value: formatMoney(ratified), tone: " text-success" },
-    { label: "Sisa", value: formatMoney(due), tone: due.amount > 0 ? " text-danger" : "" },
+    { label: "Biaya sisi Jerman", value: euro(lane.serviceFeeEurCents), tone: "" },
+    { label: "Sudah disahkan", value: euro(lane.paidEurCents), tone: " text-success" },
+    {
+      label: "Sisa",
+      value: euro(lane.remainingEurCents),
+      tone: remaining > 0 ? " text-danger" : "",
+    },
   ]
 
   return (
@@ -53,12 +43,12 @@ export function EuroObligation() {
         Euro dibayar tunai di kantor cabang. Staf Finance mencatatnya, lalu Manajer Finance
         mengesahkan. Nominal terhitung sejak disahkan, dan kewajiban ini tidak menahan satu layanan
         pun.
-        {pending.amount > 0
-          ? ` Saat ini ${formatMoney(pending)} sudah tercatat dan masih menunggu pengesahan.`
+        {lane.pendingEurCents > 0
+          ? ` Saat ini ${euro(lane.pendingEurCents)} sudah tercatat dan masih menunggu pengesahan.`
           : ""}
       </Notice>
 
-      {EURO_PAYMENTS.length === 0 ? (
+      {lane.rows.length === 0 ? (
         <p className="body-sm text-muted">
           Belum ada pembayaran Euro yang tercatat. Datang ke kantor cabang untuk membayar.
         </p>
@@ -77,13 +67,15 @@ export function EuroObligation() {
               </tr>
             </thead>
             <tbody>
-              {EURO_PAYMENTS.map((payment) => (
+              {lane.rows.map((payment) => (
                 <tr key={payment.id}>
-                  <td>{formatDate(payment.date)}</td>
-                  <td>{payment.branch}</td>
-                  <td className="numeric tabular">{formatMoney(payment.amount)}</td>
+                  <td>{formatDate(payment.paidOn)}</td>
+                  <td>{payment.branch ?? DASH}</td>
+                  <td className="numeric tabular">{euro(payment.amount)}</td>
                   <td>
-                    <span className={`badge ${BADGE[payment.status]}`}>{payment.status}</span>
+                    <span className={`badge badge-${EURO_STATUS[payment.status].tone}`}>
+                      {EURO_STATUS[payment.status].label}
+                    </span>
                   </td>
                   <td>
                     {payment.ratifiedBy ?? <span className="text-muted">Belum disahkan</span>}

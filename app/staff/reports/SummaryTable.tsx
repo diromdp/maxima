@@ -1,9 +1,42 @@
 "use client"
 
-import { formatPercent } from "@/src/lib/format"
-import { formatMoney } from "@/src/lib/money"
+import type { ReactNode } from "react"
 
-import { collectibility, type Summary } from "./sample"
+import type { GroupReportRow, GroupTotals } from "@/src/entities/report/schema"
+import { formatPercent } from "@/src/lib/format"
+import { eur, formatMoney, idr } from "@/src/lib/money"
+
+const HIGH_COLLECTIBILITY = 60
+const MID_COLLECTIBILITY = 30
+
+const collectibilityBadge = (percent: number) =>
+  percent >= HIGH_COLLECTIBILITY
+    ? "badge-success"
+    : percent >= MID_COLLECTIBILITY
+      ? "badge-warning"
+      : "badge-danger"
+
+function TotalsCells({ row }: { row: GroupTotals }) {
+  return (
+    <>
+      <td className="numeric tabular">{row.studentCount} siswa</td>
+      <td className="numeric tabular">{formatMoney(idr(row.billedIdr))}</td>
+      <td className="numeric tabular text-success">{formatMoney(idr(row.paidIdr))}</td>
+      <td className="numeric tabular text-success">{formatMoney(eur(row.paidEurCents))}</td>
+      <td className={`numeric tabular${row.remainingIdr > 0 ? " text-danger" : ""}`}>
+        {formatMoney(idr(row.remainingIdr))}
+      </td>
+      <td className={`numeric tabular${row.remainingEurCents > 0 ? " text-danger" : ""}`}>
+        {formatMoney(eur(row.remainingEurCents))}
+      </td>
+      <td className="numeric tabular">
+        <span className={`badge ${collectibilityBadge(row.collectibilityPercent)}`}>
+          {formatPercent(row.collectibilityPercent / 100)}
+        </span>
+      </td>
+    </>
+  )
+}
 
 export function SummaryTable({
   head,
@@ -12,39 +45,17 @@ export function SummaryTable({
   extra,
 }: {
   head: string
-  rows: readonly Summary[]
-  total: Summary
-  extra?: (row: Summary) => React.ReactNode
+  rows: readonly GroupReportRow[]
+  total: GroupTotals
+  extra: (row: GroupReportRow) => ReactNode
 }) {
-  const cells = (row: Summary) => (
-    <>
-      <td className="numeric tabular">{row.students} siswa</td>
-      <td className="numeric tabular">{formatMoney(row.billedIdr)}</td>
-      <td className="numeric tabular text-success">{formatMoney(row.paidIdr)}</td>
-      <td className="numeric tabular text-success">{formatMoney(row.paidEur)}</td>
-      <td className={`numeric tabular${row.dueIdr.amount > 0 ? " text-danger" : ""}`}>
-        {formatMoney(row.dueIdr)}
-      </td>
-      <td className={`numeric tabular${row.dueEur.amount > 0 ? " text-danger" : ""}`}>
-        {formatMoney(row.dueEur)}
-      </td>
-      <td className="numeric tabular">
-        <span
-          className={`badge ${collectibility(row) >= 0.6 ? "badge-success" : collectibility(row) >= 0.3 ? "badge-warning" : "badge-danger"}`}
-        >
-          {formatPercent(collectibility(row))}
-        </span>
-      </td>
-    </>
-  )
-
   return (
     <div className="table-scroll">
       <table className="table">
         <thead>
           <tr>
             <th>{head}</th>
-            {extra && <th />}
+            <th />
             <th className="numeric">Jumlah Siswa</th>
             <th className="numeric">Total Penagihan (Rp)</th>
             <th className="numeric">Pemasukan (Rp)</th>
@@ -56,16 +67,16 @@ export function SummaryTable({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.key}>
-              <td style={{ fontWeight: 600 }}>{row.label}</td>
-              {extra && <td className="text-muted">{extra(row)}</td>}
-              {cells(row)}
+            <tr key={row.id ?? "none"}>
+              <td style={{ fontWeight: 600 }}>{row.name}</td>
+              <td className="text-muted">{extra(row)}</td>
+              <TotalsCells row={row} />
             </tr>
           ))}
           <tr style={{ fontWeight: 700 }}>
-            <td>{total.label}</td>
-            {extra && <td />}
-            {cells(total)}
+            <td>TOTAL KESELURUHAN</td>
+            <td />
+            <TotalsCells row={total} />
           </tr>
         </tbody>
       </table>

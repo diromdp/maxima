@@ -172,6 +172,15 @@
       background-color: t.$canvas-soft;
       font-weight: t.$weight-semibold;
     }
+
+    &[data-locked] {
+      opacity: 0.5;
+      cursor: not-allowed;
+
+      &:hover {
+        background-color: transparent;
+      }
+    }
   }
 
   .segmented {
@@ -325,6 +334,28 @@
     border-radius: t.$radius-sm;
     padding: t.$space-sm t.$space-md;
     background-color: t.$canvas-soft;
+  }
+
+  button.level-card {
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: box-shadow 120ms linear;
+
+    &:focus-visible {
+      outline: 2px solid t.$ink;
+      outline-offset: 2px;
+    }
+  }
+
+  button.level-card[aria-pressed="true"],
+  button.badge[aria-pressed="true"] {
+    box-shadow: inset 0 0 0 2px t.$ink;
+  }
+
+  button.badge {
+    font: inherit;
+    cursor: pointer;
   }
 
   @each $status, $tone-name in t.$status-aliases {
@@ -640,5 +671,11 @@
   .media {
     border-radius: t.$radius-md;
     overflow: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mantine-Skeleton-root::after {
+    animation: none;
   }
 }

@@ -78,11 +78,21 @@ export function Sidebar({
       <Box
         px={collapsed ? 4 : 12}
         py={8}
-        style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", scrollbarWidth: "thin" }}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          scrollbarWidth: "thin",
+        }}
       >
         <Stack gap="lg">
           {sections.map((section, i) => (
-            <Stack key={section.group ?? `standalone-${i}`} gap={4} align={collapsed ? "center" : "stretch"}>
+            <Stack
+              key={section.group ?? `standalone-${i}`}
+              gap={4}
+              align={collapsed ? "center" : "stretch"}
+            >
               {section.group && !collapsed && (
                 <Text h={32} px={16} size="12px" fw={500} c="dimmed" style={{ lineHeight: "32px" }}>
                   {section.group}
@@ -92,40 +102,62 @@ export function Sidebar({
               {section.items.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
 
-                const row = (
-                  <Box
-                    component={Link}
-                    href={item.href}
-                    onClick={onNavigate}
-                    aria-current={active ? "page" : undefined}
-                    className="nav-row"
-                    data-active={active || undefined}
-                    h={40}
-                    w={collapsed ? 40 : undefined}
-                    px={collapsed ? 0 : 16}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: collapsed ? "center" : "flex-start",
-                      gap: 12,
-                      borderRadius: 9999,
-                      color: "var(--ink)",
-                      textDecoration: "none",
-                    }}
-                  >
+                const isLocked = item.lockReason !== undefined
+                const look = {
+                  className: "nav-row",
+                  "data-active": active || undefined,
+                  "data-locked": isLocked || undefined,
+                  h: 40,
+                  w: collapsed ? 40 : undefined,
+                  px: collapsed ? 0 : 16,
+                  style: {
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: collapsed ? "center" : "flex-start",
+                    gap: 12,
+                    borderRadius: 9999,
+                    color: "var(--ink)",
+                    textDecoration: "none",
+                  },
+                } as const
+                const content = (
+                  <>
                     <HugeiconsIcon icon={item.icon} size={20} strokeWidth={1.5} />
                     {!collapsed && (
                       <Text size="14px" lh="24px" fw={active ? 600 : 400} truncate="end">
                         {item.label}
                       </Text>
                     )}
+                  </>
+                )
+                const row = isLocked ? (
+                  <Box
+                    component="span"
+                    tabIndex={0}
+                    aria-disabled
+                    aria-label={`${item.label}. ${item.lockReason ?? ""}`}
+                    {...look}
+                  >
+                    {content}
+                  </Box>
+                ) : (
+                  <Box
+                    component={Link}
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
+                    {...look}
+                  >
+                    {content}
                   </Box>
                 )
 
-                return collapsed ? (
+                return collapsed || isLocked ? (
                   <Tooltip
                     key={item.href}
-                    label={item.label}
+                    label={item.lockReason ?? item.label}
+                    multiline
+                    w={isLocked ? 260 : undefined}
                     position="right"
                     withArrow
                     openDelay={200}

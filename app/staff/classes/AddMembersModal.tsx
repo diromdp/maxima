@@ -1,117 +1,161 @@
 "use client"
 
-import { Checkbox, Group, Modal } from "@mantine/core"
-import { useState } from "react"
+import { Checkbox, Group, Modal, Skeleton } from "@mantine/core"
+import { useForm } from "@mantine/form"
 
+import { QueryError } from "@/src/components/data/QueryError"
 import { Notice } from "@/src/components/ui/Notice"
-import { notify } from "@/src/lib/notify"
+import { addClassMembers } from "@/src/entities/class/actions"
+import { classCandidatesQuery } from "@/src/entities/class/queries"
+import type { Candidates, ClassRow } from "@/src/entities/class/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { useActionForm } from "@/src/lib/use-action-form"
 
-import { CANDIDATE_STUDENTS, capacityLabel, type ClassRoom, seatsLeft } from "./sample"
+import { CapacityWarning, Facts, MEMBER_INVALIDATIONS, TITLE_STYLE } from "./DialogParts"
 
-const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
+const CANDIDATE_SKELETONS = 4
 
-export function AddMembersModal({
-  opened,
-  onClose,
-  room,
-}: {
-  opened: boolean
-  onClose: () => void
-  room: ClassRoom
-}) {
-  const [selected, setSelected] = useState<string[]>([])
-  const [isOverloadAccepted, setIsOverloadAccepted] = useState(false)
+type AddForm = { studentIds: string[]; isOverCapacityConfirmed: boolean }
 
-  const overflow = selected.length - seatsLeft(room)
-  const isOverCapacity = overflow > 0
-  const canSubmit = selected.length > 0 && (!isOverCapacity || isOverloadAccepted)
+export function AddMembersModal({ room, onClose }: { room: ClassRow; onClose: () => void }) {
+  const candidates = useRead(classCandidatesQuery(room.id))
 
   return (
     <Modal
-      opened={opened}
+      opened
       onClose={onClose}
       title={`Tambah Siswa ke ${room.name}`}
       size="lg"
       styles={TITLE_STYLE}
     >
-      <form
-        className="stack stack-lg"
-        onSubmit={(event) => {
-          event.preventDefault()
-          notify.success(`${selected.length} siswa ditambahkan ke ${room.name}.`)
-          onClose()
-        }}
-        onReset={onClose}
-      >
-        <dl className="row row-wrap" style={{ gap: 24, margin: 0 }}>
-          {[
-            { label: "Kapasitas", value: `${capacityLabel(room)} Siswa` },
-            { label: "Sisa kursi", value: `${Math.max(seatsLeft(room), 0)} Kursi` },
-            { label: "Level", value: `Deutsch ${room.level}` },
-          ].map(({ label, value }) => (
-            <div key={label} className="stack" style={{ gap: 2 }}>
-              <dt className="caption text-muted">{label}</dt>
-              <dd className="body-sm" style={{ fontWeight: 600, margin: 0 }}>
-                {value}
-              </dd>
-            </div>
+      {candidates.isError ? (
+        <QueryError message={candidates.error.message} onRetry={() => void candidates.refetch()} />
+      ) : candidates.isPending ? (
+        <div className="stack" aria-busy="true">
+          <span className="sr-only" role="status">
+            Memuat
+          </span>
+          {Array.from({ length: CANDIDATE_SKELETONS }, (_, index) => (
+            <Skeleton key={index} height={44} radius="sm" aria-hidden />
           ))}
-        </dl>
+        </div>
+      ) : (
+        <AddMembersForm room={room} candidates={candidates.data} onClose={onClose} />
+      )}
+    </Modal>
+  )
+}
 
+function AddMembersForm({
+  room,
+  candidates,
+  onClose,
+}: {
+  room: ClassRow
+  candidates: Candidates
+  onClose: () => void
+}) {
+  const form = useForm<AddForm>({
+    initialValues: { studentIds: [], isOverCapacityConfirmed: false },
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) => addClassMembers(room.id, values.studentIds, values.isOverCapacityConfirmed),
+    successMessage: `${form.values.studentIds.length} siswa ditambahkan ke ${room.name}.`,
+    invalidates: MEMBER_INVALIDATIONS,
+    onSuccess: onClose,
+  })
+
+  const chosen = form.values.studentIds.length
+  const isOverCapacity = chosen > candidates.remainingSeats
+  const blockedReason =
+    chosen === 0
+      ? "Pilih dulu siswa yang akan ditambahkan"
+      : isOverCapacity && !form.values.isOverCapacityConfirmed
+        ? "Centang persetujuan melebihi kapasitas dulu"
+        : undefined
+
+  return (
+    <form className="stack stack-lg" onSubmit={submit} noValidate>
+      {formError && <Notice tone="danger">{formError}</Notice>}
+
+      <Facts
+        items={[
+          { label: "Kapasitas", value: `${candidates.memberCount}/${candidates.capacity} Siswa` },
+          { label: "Sisa kursi", value: `${candidates.remainingSeats} Kursi` },
+          { label: "Level", value: `Deutsch ${candidates.level.name}` },
+        ]}
+      />
+
+      {candidates.data.length === 0 ? (
+        <p className="body-sm text-muted">Tidak ada siswa aktif yang belum masuk kelas mana pun.</p>
+      ) : (
         <Checkbox.Group
           label="Siswa tanpa kelas"
           description="Hanya siswa berstatus Aktif yang belum masuk kelas mana pun."
-          value={selected}
-          onChange={setSelected}
+          {...form.getInputProps("studentIds")}
         >
           <div className="stack" style={{ gap: 12, marginBlockStart: 12 }}>
-            {CANDIDATE_STUDENTS.map((student) => (
+            {candidates.data.map((student) => (
               <Checkbox
-                key={student.nis}
-                value={student.nis}
-                label={student.name}
-                description={`NIS ${student.nis} · Level ${student.level} · ${student.branch}`}
+                key={student.studentId}
+                value={student.studentId}
+                disabled={student.currentClassName !== null}
+                label={
+                  <span className="row row-wrap" style={{ gap: 8 }}>
+                    {student.fullName}
+                    {student.isAwaitingNewLevel && (
+                      <span className="badge badge-berjalan">Menunggu kelas level baru</span>
+                    )}
+                  </span>
+                }
+                description={
+                  <>
+                    {[
+                      `NIS ${student.nis ?? "-"}`,
+                      student.levelName && `Level ${student.levelName}`,
+                      student.branchName,
+                      student.currentClassName && `Masih di ${student.currentClassName}`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    {student.currentClassName && (
+                      <span className="block">
+                        Pindahkan dari kelas asalnya lewat tombol Pindahkan.
+                      </span>
+                    )}
+                  </>
+                }
               />
             ))}
           </div>
         </Checkbox.Group>
+      )}
 
-        {isOverCapacity && (
-          <Notice tone="warning" title="Melebihi kapasitas kelas">
-            <div className="stack" style={{ gap: 8 }}>
-              <span>
-                {room.name} tinggal {Math.max(seatsLeft(room), 0)} kursi, sedang yang dipilih{" "}
-                {selected.length} siswa. Kelebihan {overflow} siswa butuh persetujuan Anda.
-              </span>
-              <Checkbox
-                label="Saya tetap menambahkan siswa melebihi kapasitas."
-                checked={isOverloadAccepted}
-                onChange={(event) => setIsOverloadAccepted(event.currentTarget.checked)}
-              />
-            </div>
-          </Notice>
-        )}
+      {isOverCapacity && (
+        <CapacityWarning
+          className={room.name}
+          seats={candidates.remainingSeats}
+          chosen={chosen}
+          checked={form.values.isOverCapacityConfirmed}
+          onChange={(checked) => form.setFieldValue("isOverCapacityConfirmed", checked)}
+          consent="Saya tetap menambahkan siswa melebihi kapasitas."
+        />
+      )}
 
-        <Group justify="flex-end">
-          <button type="reset" className="btn btn-secondary">
-            Batal
-          </button>
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={!canSubmit}
-            title={
-              selected.length === 0
-                ? "Pilih dulu siswa yang akan ditambahkan"
-                : isOverCapacity && !isOverloadAccepted
-                  ? "Centang persetujuan melebihi kapasitas dulu"
-                  : undefined
-            }
-          >
-            Tambahkan {selected.length > 0 ? `${selected.length} Siswa` : "Siswa"}
-          </button>
-        </Group>
-      </form>
-    </Modal>
+      <Group justify="flex-end">
+        <button type="button" className="btn btn-secondary" onClick={onClose}>
+          Batal
+        </button>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={blockedReason !== undefined || isPending}
+          title={blockedReason}
+        >
+          {isPending ? "Menyimpan..." : `Tambahkan ${chosen > 0 ? `${chosen} Siswa` : "Siswa"}`}
+        </button>
+      </Group>
+    </form>
   )
 }

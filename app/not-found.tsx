@@ -2,7 +2,8 @@ import type { Metadata } from "next"
 import Link from "next/link"
 
 import { ErrorScreen } from "@/src/components/layout/ErrorScreen"
-import { getSession, homePath, STUDENT_LOGIN } from "@/src/lib/auth/session"
+import { getSession } from "@/src/lib/auth/session"
+import { homePath, STUDENT_LOGIN } from "@/src/lib/auth/tokens"
 
 export const metadata: Metadata = { title: "Halaman tidak ditemukan · Maxima Stiftung" }
 

@@ -1,117 +1,81 @@
-export type Reviewer = "Marketing" | "Admission"
+import type { PortalProfile } from "@/src/entities/portal/schema"
+import { formatDateLong } from "@/src/lib/format"
 
-export type ProfileField = {
-  readonly key: string
-  readonly label: string
-  readonly value: string
-  readonly reviewer: Reviewer
-  readonly needsDocument?: boolean
-}
+export type ProfileRow = { readonly label: string; readonly value: string }
 
 export type ProfileSection = {
   readonly id: string
   readonly title: string
-  readonly fields: readonly ProfileField[]
+  readonly rows: readonly ProfileRow[]
 }
 
-export const STUDENT = {
-  fullName: "Andi Nugroho",
-  status: "Aktif",
-} as const
+const EMPTY = "Belum diisi"
 
-export const PERSONAL: ProfileSection = {
-  id: "data-diri",
-  title: "Data Diri",
-  fields: [
-    {
-      key: "fullName",
-      label: "Nama lengkap",
-      value: "Andi Nugroho",
-      reviewer: "Admission",
-      needsDocument: true,
+const joined = (values: readonly (string | null)[]): string | null =>
+  values.filter((value): value is string => Boolean(value)).join(", ") || null
+
+const row = (label: string, value: string | null): ProfileRow => ({ label, value: value ?? EMPTY })
+
+export function profileSectionsOf({ identity, companions }: PortalProfile) {
+  const birth = joined([
+    identity.birthPlace,
+    identity.birthDate ? formatDateLong(identity.birthDate) : null,
+  ])
+  const address = joined([
+    identity.address,
+    identity.village,
+    identity.district,
+    identity.city,
+    identity.province,
+    identity.postalCode,
+  ])
+
+  return {
+    personal: {
+      id: "data-diri",
+      title: "Data Diri",
+      rows: [
+        row("Nama lengkap", identity.fullName),
+        row("Panggilan", identity.anrede),
+        row("NIK", identity.nik),
+        row("Tempat, tanggal lahir", birth),
+        row("Jenis kelamin", identity.gender),
+      ],
     },
-    { key: "nickname", label: "Nama panggilan", value: "Andi", reviewer: "Marketing" },
-    {
-      key: "nik",
-      label: "NIK",
-      value: "3273xxxxxxxxxxxx",
-      reviewer: "Admission",
-      needsDocument: true,
+    contact: {
+      id: "kontak",
+      title: "Kontak dan Alamat",
+      rows: [
+        row("HP pribadi", identity.phonePersonal),
+        row("HP WhatsApp", identity.whatsapp),
+        row("Email", identity.email),
+        row("Alamat", address),
+      ],
     },
-    {
-      key: "birth",
-      label: "Tempat, tanggal lahir",
-      value: "Bandung, 14 Juni 2004",
-      reviewer: "Admission",
-      needsDocument: true,
+    education: {
+      id: "pendidikan",
+      title: "Pendidikan Terakhir",
+      rows: [
+        row("Jenjang", identity.lastEducationLevel),
+        row("Asal sekolah", identity.schoolName),
+        row("Jurusan", identity.schoolMajor),
+        row("Tahun lulus", identity.graduationYear),
+        row("Jurusan diminati", identity.interestMajor),
+      ],
     },
-    {
-      key: "gender",
-      label: "Jenis kelamin",
-      value: "Laki-laki",
-      reviewer: "Admission",
-      needsDocument: true,
+    companions: {
+      id: "pendamping",
+      title: "Pendamping Anda",
+      rows: [
+        row("PIC Konsultan", companions.pic),
+        row("Cabang", companions.branch),
+        row("Pengajar kelas", companions.teacher),
+      ],
     },
-  ],
+  } satisfies Record<string, ProfileSection>
 }
 
-export const CONTACT: ProfileSection = {
-  id: "kontak",
-  title: "Kontak dan Alamat",
-  fields: [
-    { key: "phone", label: "HP pribadi", value: "0812xxxxxxx", reviewer: "Marketing" },
-    { key: "whatsapp", label: "HP WhatsApp", value: "0813xxxxxxx", reviewer: "Marketing" },
-    { key: "email", label: "Email", value: "andi.nugroho@email.com", reviewer: "Marketing" },
-    {
-      key: "address",
-      label: "Alamat",
-      value: "Jl. Cihampelas No. 45, Bandung",
-      reviewer: "Marketing",
-    },
-  ],
-}
-
-export const EDUCATION: ProfileSection = {
-  id: "pendidikan",
-  title: "Pendidikan Terakhir",
-  fields: [
-    { key: "level", label: "Jenjang", value: "SMK", reviewer: "Admission", needsDocument: true },
-    {
-      key: "school",
-      label: "Asal sekolah",
-      value: "SMKN 4 Bandung",
-      reviewer: "Admission",
-      needsDocument: true,
-    },
-    {
-      key: "major",
-      label: "Jurusan",
-      value: "Keperawatan",
-      reviewer: "Admission",
-      needsDocument: true,
-    },
-    {
-      key: "graduation",
-      label: "Tahun lulus",
-      value: "2023",
-      reviewer: "Admission",
-      needsDocument: true,
-    },
-    {
-      key: "interest",
-      label: "Jurusan diminati",
-      value: "Pflege · Gastronomie · Logistik",
-      reviewer: "Marketing",
-    },
-  ],
-}
-
-export const COMPANIONS = [
-  { label: "PIC Konsultan", value: "Ratna Sari" },
-  { label: "Cabang", value: "Bandung" },
-  { label: "Pengajar kelas", value: "Mulyadi, S.Pd" },
-] as const
-
-export const CHANGEABLE_SECTIONS: readonly ProfileSection[] = [PERSONAL, CONTACT, EDUCATION]
+export const ON_LEAVE_BLOCK =
+  "Selama cuti, portal terbuka tanpa aksi. Ajukan perubahan data setelah Anda kembali ke kelas."
 
 export const NOT_CHANGEABLE_HERE = ["Paket dan harga", "No Kontrak", "Sumber lead"] as const

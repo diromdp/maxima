@@ -15,6 +15,8 @@ export const formatDate = (value: string | Date): string => wib(value).format("D
 
 export const formatDateLong = (value: string | Date): string => wib(value).format("DD MMMM YYYY")
 
+export const formatMonthYear = (value: string | Date): string => wib(value).format("MMM YYYY")
+
 export const formatDateTime = (value: string | Date): string =>
   `${wib(value).format("DD MMM YYYY")} · ${wib(value).format("HH.mm")} WIB`
 

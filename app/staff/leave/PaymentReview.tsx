@@ -1,100 +1,128 @@
 "use client"
 
-import { File01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Group, Modal, Stack } from "@mantine/core"
-import { notifications } from "@mantine/notifications"
+import { Textarea } from "@mantine/core"
+import { schemaResolver, useForm } from "@mantine/form"
 import { useState } from "react"
 
+import { FormModal } from "@/src/components/ui/FormModal"
 import { Notice } from "@/src/components/ui/Notice"
-import { formatDateTime } from "@/src/lib/format"
-import { formatMoney, idr, shortfall as moneyShortfall } from "@/src/lib/money"
+import { checkPayment } from "@/src/entities/leave/actions"
+import { type LeaveDetail, proofRejectionFormSchema } from "@/src/entities/leave/schema"
+import { formatDateLong } from "@/src/lib/format"
+import { formatMoney, idr } from "@/src/lib/money"
+import { useActionForm } from "@/src/lib/use-action-form"
 
-import { Field, Panel } from "./LeavePanels"
+import { Field, FileRow, Panel } from "./LeavePanels"
 import { RejectModal } from "./RejectModal"
-import type { StaffLeave } from "./sample"
 
-const MODAL_TITLE = { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 }
+type Dialog = "verify" | "reject-proof" | "reject" | null
 
-function ProofModal({
+const NO_PROOF = "Verifikasi terbuka setelah siswa mengunggah bukti pembayaran."
+const SELF_ASSESSED =
+  "Anda yang menetapkan kewajiban cuti ini, jadi pembayarannya diverifikasi Staf Finance lain atau Manajer Finance."
+
+const obligationOf = (leave: LeaveDetail) =>
+  leave.finance.amountIdr === null ? "-" : formatMoney(idr(leave.finance.amountIdr))
+
+const deadlineOf = (leave: LeaveDetail) =>
+  leave.finance.deadline ? `${formatDateLong(leave.finance.deadline)} pukul 23.59 WIB` : "-"
+
+function VerifyModal({
   leave,
-  opened,
+  onRejectProof,
   onClose,
 }: {
-  leave: StaffLeave
-  opened: boolean
+  leave: LeaveDetail
+  onRejectProof: () => void
   onClose: () => void
 }) {
-  const proof = leave.proof
+  const form = useForm({ initialValues: {} })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: () => checkPayment(leave.id, { decision: "verify" }),
+    successMessage: `Pembayaran ${leave.student.name} diverifikasi. Pengajuan pindah ke Persetujuan Akhir.`,
+    invalidates: [["leaves"]],
+    onSuccess: onClose,
+  })
+
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
+    <FormModal
       title="Verifikasi Bukti Pembayaran"
       size="lg"
-      styles={{ title: MODAL_TITLE }}
+      submitLabel="Verifikasi Pembayaran"
+      formError={formError}
+      isPending={isPending}
+      onSubmit={submit}
+      onClose={onClose}
     >
-      <Stack gap="md">
-        <div className="grid-3">
-          <Field label="Siswa" value={`${leave.student.name} · ${leave.student.nis}`} />
-          <Field label="Nominal" value={proof ? formatMoney(proof.amount) : "-"} />
-          <Field label="ID Transaksi" value={proof?.trxId ?? "-"} />
-        </div>
-        <div
-          className="card-soft stack items-center"
-          style={{ minHeight: 220, justifyContent: "center", gap: 8 }}
-        >
-          <HugeiconsIcon icon={File01Icon} size={32} strokeWidth={1.5} className="text-faint" />
-          <span className="body-sm text-muted">{proof?.name ?? "Belum ada berkas"}</span>
-          <a
-            className="btn btn-secondary btn-sm"
-            href="#"
-            onClick={(event) => event.preventDefault()}
-          >
-            Buka di tab baru
-          </a>
-        </div>
-        <Group justify="flex-end">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Batal
-          </button>
-          <button
-            type="button"
-            className="btn btn-danger"
-            onClick={() => {
-              notifications.show({
-                color: "red",
-                message: `Bukti ${leave.student.name} ditolak. Siswa diminta mengunggah ulang sebelum batas waktu.`,
-              })
-              onClose()
-            }}
-          >
-            Tolak Bukti
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              notifications.show({
-                message: `Pembayaran ${leave.student.name} diverifikasi. Pengajuan pindah ke Persetujuan Akhir.`,
-              })
-              onClose()
-            }}
-          >
-            Verifikasi Pembayaran
-          </button>
-        </Group>
-      </Stack>
-    </Modal>
+      <div className="grid-2">
+        <Field label="Siswa" value={`${leave.student.name} · ${leave.student.nis ?? "-"}`} />
+        <Field label="Nominal" value={obligationOf(leave)} />
+      </div>
+      <FileRow name="Bukti Pembayaran" path={`/leaves/${leave.id}/proof`} />
+      <div className="row row-between row-wrap">
+        <span className="caption text-muted">
+          Bukti tidak sesuai? Siswa diminta mengunggah ulang.
+        </span>
+        <button type="button" className="btn btn-danger btn-sm" onClick={onRejectProof}>
+          Tolak Bukti
+        </button>
+      </div>
+    </FormModal>
   )
 }
 
-export function PaymentReview({ leave }: { leave: StaffLeave }) {
-  const [dialog, setDialog] = useState<"proof" | "reject" | null>(null)
+function RejectProofModal({ leave, onClose }: { leave: LeaveDetail; onClose: () => void }) {
+  const form = useForm({
+    initialValues: { reason: "" },
+    validate: schemaResolver(proofRejectionFormSchema, { sync: true }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) => checkPayment(leave.id, { decision: "reject-proof", ...values }),
+    successMessage: `Bukti ${leave.student.name} ditolak. Siswa diminta mengunggah ulang sebelum batas waktu.`,
+    invalidates: [["leaves"]],
+    onSuccess: onClose,
+  })
 
-  const finance = leave.finance
-  const due = finance ? moneyShortfall(finance.minimumBeforeLeave, finance.totalPaid) : idr(0)
-  const proof = leave.proof
+  return (
+    <FormModal
+      title="Tolak Bukti Pembayaran"
+      submitLabel="Tolak Bukti"
+      formError={formError}
+      isPending={isPending}
+      onSubmit={submit}
+      onClose={onClose}
+    >
+      <span className="body-sm text-muted">
+        Berkas bukti dihapus dan pengajuan kembali ke Menunggu Pembayaran. Siswa mengunggah ulang
+        sebelum {deadlineOf(leave)}.
+      </span>
+      <Textarea
+        label="Alasan"
+        description="Dibaca siswa apa adanya."
+        autosize
+        minRows={3}
+        withAsterisk
+        {...form.getInputProps("reason")}
+      />
+    </FormModal>
+  )
+}
+
+export function PaymentReview({
+  leave,
+  canDecide,
+  isAssessor,
+}: {
+  leave: LeaveDetail
+  canDecide: boolean
+  isAssessor: boolean
+}) {
+  const [dialog, setDialog] = useState<Dialog>(null)
+  const close = () => setDialog(null)
+  const { hasProof } = leave
+  const verifyBlocker = !hasProof ? NO_PROOF : isAssessor ? SELF_ASSESSED : null
 
   return (
     <>
@@ -103,69 +131,69 @@ export function PaymentReview({ leave }: { leave: StaffLeave }) {
           <Field
             label="Status Keuangan"
             value={
-              <span className={`badge ${proof ? "badge-berjalan" : "badge-tindakan"}`}>
-                {proof ? "Menunggu Verifikasi Pembayaran" : "Menunggu Pembayaran"}
+              <span className={`badge ${hasProof ? "badge-terbuka" : "badge-berjalan"}`}>
+                {hasProof ? "Menunggu Verifikasi Pembayaran" : "Menunggu Pembayaran"}
               </span>
             }
           />
-          <Field label="Total Kewajiban" value={formatMoney(due)} />
+          <Field label="Total Kewajiban" value={obligationOf(leave)} />
           <Field
             label="Verifikasi Pembayaran"
-            value={proof ? "Bukti terkirim, belum diperiksa" : "Belum ada bukti"}
+            value={hasProof ? "Bukti terkirim, belum diperiksa" : "Belum ada bukti"}
           />
-          <Field label="Batas Waktu" value={finance ? formatDateTime(finance.deadline) : "-"} />
+          <Field label="Batas Waktu" value={deadlineOf(leave)} />
         </div>
 
         <div className="stack" style={{ gap: 4 }}>
           <span className="caption text-muted">Bukti Pembayaran</span>
-          {proof ? (
-            <div className="row-soft">
-              <span className="row body-sm" style={{ gap: 8, minWidth: 0 }}>
-                <HugeiconsIcon icon={File01Icon} size={16} strokeWidth={1.5} />
-                {proof.name} · {formatMoney(proof.amount)} · {proof.trxId}
-              </span>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setDialog("proof")}
-              >
-                Pratinjau
-              </button>
-            </div>
+          {hasProof ? (
+            <FileRow name="Bukti Pembayaran" path={`/leaves/${leave.id}/proof`} />
           ) : (
             <Notice tone="warning">
-              Siswa belum mengunggah bukti. Batas waktu{" "}
-              {finance ? formatDateTime(finance.deadline) : "-"}; lewat itu pengajuan gugur.
+              Siswa belum mengunggah bukti. Batas waktu {deadlineOf(leave)}; lewat itu pengajuan
+              gugur.
             </Notice>
           )}
         </div>
 
-        <div className="row row-wrap" style={{ gap: 8 }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!proof}
-            title={proof ? undefined : "Verifikasi terbuka setelah bukti masuk."}
-            onClick={() => setDialog("proof")}
-          >
-            Verifikasi Pembayaran
-          </button>
-          <button type="button" className="btn btn-danger" onClick={() => setDialog("reject")}>
-            Tolak Pengajuan Cuti
-          </button>
-          {!proof && (
-            <span className="caption text-muted">Verifikasi terbuka setelah bukti masuk.</span>
-          )}
-        </div>
+        {canDecide ? (
+          <div className="row row-wrap" style={{ gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={verifyBlocker !== null}
+              title={verifyBlocker ?? undefined}
+              onClick={() => setDialog("verify")}
+            >
+              Verifikasi Pembayaran
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => setDialog("reject")}>
+              Tolak Pengajuan Cuti
+            </button>
+            {verifyBlocker && <span className="caption text-muted">{verifyBlocker}</span>}
+          </div>
+        ) : (
+          <span className="caption text-muted">
+            Keputusan tahap ini dikerjakan Staf Finance atau Manajer Finance.
+          </span>
+        )}
       </Panel>
 
-      <ProofModal leave={leave} opened={dialog === "proof"} onClose={() => setDialog(null)} />
-      <RejectModal
-        leave={leave}
-        stageLabel="Verifikasi Pembayaran"
-        opened={dialog === "reject"}
-        onClose={() => setDialog(null)}
-      />
+      {dialog === "verify" && (
+        <VerifyModal
+          leave={leave}
+          onRejectProof={() => setDialog("reject-proof")}
+          onClose={close}
+        />
+      )}
+      {dialog === "reject-proof" && <RejectProofModal leave={leave} onClose={close} />}
+      {dialog === "reject" && (
+        <RejectModal
+          leave={leave}
+          reject={(values) => checkPayment(leave.id, { decision: "reject", ...values })}
+          onClose={close}
+        />
+      )}
     </>
   )
 }

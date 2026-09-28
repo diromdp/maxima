@@ -1,14 +1,18 @@
 import Link from "next/link"
 
 import { PageHeader } from "@/src/components/layout/PageHeader"
+import { ownLeavesQuery } from "@/src/entities/leave/queries"
+import { Prefetched } from "@/src/lib/api/Prefetched"
 import { requireSession } from "@/src/lib/auth/session"
 
 import { PAGE_SUBTITLE } from "../leave"
 import { LeaveForm } from "../LeaveForm"
 import { StageProgress } from "../StageProgress"
 
+const DRAFT = { state: "draft", stage: 1 } as const
+
 export default async function NewLeavePage() {
-  await requireSession("student")
+  const session = await requireSession("student")
 
   return (
     <div className="stack stack-lg">
@@ -24,9 +28,11 @@ export default async function NewLeavePage() {
       </div>
 
       <div className="grid-main-aside">
-        <LeaveForm />
+        <Prefetched reads={[ownLeavesQuery()]}>
+          <LeaveForm status={session.status} />
+        </Prefetched>
         <div style={{ alignSelf: "start" }}>
-          <StageProgress state={{ kind: "draft" }} />
+          <StageProgress leave={DRAFT} />
         </div>
       </div>
     </div>

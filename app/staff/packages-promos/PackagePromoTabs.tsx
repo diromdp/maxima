@@ -2,37 +2,41 @@
 
 import { Tabs } from "@mantine/core"
 
+import { ScrollableTabsList } from "@/src/components/ui/ScrollableTabsList"
+import { useListParams } from "@/src/lib/use-list-params"
+
 import { PackagesTab } from "./PackagesTab"
 import { PromosTab } from "./PromosTab"
 
-export function PackagePromoTabs({
-  initialTab,
-  readOnly,
-}: {
-  initialTab?: string
-  readOnly: boolean
-}) {
-  const TABS = [
-    { value: "packages", label: "Paket Program", panel: <PackagesTab readOnly={readOnly} /> },
-    { value: "promos", label: "Promo / Diskon", panel: <PromosTab readOnly={readOnly} /> },
-  ] as const
-  const initial = TABS.find((tab) => tab.value === initialTab) ?? TABS[0]
+const TABS = [
+  { value: "packages", label: "Paket Program" },
+  { value: "promos", label: "Promo / Diskon" },
+] as const
+
+export function PackagePromoTabs({ readOnly }: { readOnly: boolean }) {
+  const { params, setParams } = useListParams(["tab"])
+  const active = TABS.find((tab) => tab.value === params.tab)?.value ?? TABS[0].value
 
   return (
-    <Tabs defaultValue={initial.value} keepMounted={false}>
-      <Tabs.List mb="lg">
+    <Tabs
+      value={active}
+      onChange={(value) => setParams({ tab: value === TABS[0].value ? null : value })}
+      keepMounted={false}
+    >
+      <ScrollableTabsList>
         {TABS.map((tab) => (
           <Tabs.Tab key={tab.value} value={tab.value}>
             {tab.label}
           </Tabs.Tab>
         ))}
-      </Tabs.List>
+      </ScrollableTabsList>
 
-      {TABS.map((tab) => (
-        <Tabs.Panel key={tab.value} value={tab.value}>
-          {tab.panel}
-        </Tabs.Panel>
-      ))}
+      <Tabs.Panel value="packages">
+        <PackagesTab readOnly={readOnly} />
+      </Tabs.Panel>
+      <Tabs.Panel value="promos">
+        <PromosTab readOnly={readOnly} />
+      </Tabs.Panel>
     </Tabs>
   )
 }

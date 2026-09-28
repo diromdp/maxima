@@ -2,204 +2,243 @@
 
 import { Modal, Select, TextInput } from "@mantine/core"
 import { DateInput, DatesProvider } from "@mantine/dates"
-import { useState } from "react"
+import { schemaResolver, useForm } from "@mantine/form"
 
 import { Notice } from "@/src/components/ui/Notice"
+import { savePlacement, saveVisa } from "@/src/entities/placement/actions"
+import {
+  formOf,
+  inputOf,
+  PLACEMENT_FIELDS,
+  type PlacementDetail,
+  type PlacementField,
+  type PlacementForm,
+  placementFormSchema,
+  VISA_FIELDS,
+  VISA_KINDS,
+  type VisaField,
+  type VisaForm,
+  visaFormSchema,
+} from "@/src/entities/placement/schema"
 import { formatDate } from "@/src/lib/format"
-
-import { type Alumnus, type PlacementData, VISA_TYPES, type VisaData } from "../sample"
+import { useActionForm } from "@/src/lib/use-action-form"
 
 const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export type EditSection = "visa" | "placement"
 
-const proposalLabel = (value: string | null | undefined) =>
-  value === null || value === undefined || value === ""
-    ? null
-    : /^\d{4}-\d{2}-\d{2}$/.test(value)
-      ? formatDate(value)
-      : value
-
-export function AlumniEditModal({
-  alumnus,
-  section,
-  onClose,
-  onSave,
-}: {
-  alumnus: Alumnus
-  section: EditSection | null
-  onClose: () => void
-  onSave: (section: EditSection, visa: VisaData, placement: PlacementData) => void
-}) {
-  const [visa, setVisa] = useState<VisaData>(alumnus.visa)
-  const [placement, setPlacement] = useState<PlacementData>(alumnus.placement)
-  const proposal = alumnus.proposal ?? {}
-
-  const hint = (key: keyof VisaData | keyof PlacementData) => {
-    const value = proposalLabel(proposal[key as keyof typeof proposal])
-    return value ? `Usulan siswa: ${value}` : undefined
+function proposalHintOf(detail: PlacementDetail) {
+  return (field: VisaField | PlacementField): string | undefined => {
+    const value = detail.proposals[field]?.value
+    if (!value) return undefined
+    return `Usulan siswa: ${ISO_DATE.test(value) ? formatDate(value) : value}`
   }
+}
 
-  const willBecomeAlumni =
-    section === "placement" && !alumnus.placement.departureAt && placement.departureAt
+function FormActions({ isPending, onClose }: { isPending: boolean; onClose: () => void }) {
+  return (
+    <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+      <button type="button" className="btn btn-secondary" onClick={onClose}>
+        Batal
+      </button>
+      <button type="submit" className="btn btn-primary" disabled={isPending}>
+        {isPending ? "Menyimpan..." : "Simpan"}
+      </button>
+    </div>
+  )
+}
+
+function DateField({
+  label,
+  value,
+  error,
+  description,
+  isClearable = true,
+  onChange,
+}: {
+  label: string
+  value: string
+  error: React.ReactNode
+  description?: string
+  isClearable?: boolean
+  onChange: (value: string) => void
+}) {
+  return (
+    <DateInput
+      label={label}
+      description={description}
+      valueFormat="DD MMM YYYY"
+      clearable={isClearable}
+      value={value || null}
+      error={error}
+      onChange={(next) => onChange(next ?? "")}
+    />
+  )
+}
+
+function VisaFields({ detail, onClose }: { detail: PlacementDetail; onClose: () => void }) {
+  const hint = proposalHintOf(detail)
+  const form = useForm<VisaForm>({
+    initialValues: formOf(detail.values, VISA_FIELDS),
+    validate: schemaResolver(visaFormSchema, { sync: true }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) => saveVisa(detail.student.nis, inputOf(values)),
+    successMessage: "Proses visa tersimpan.",
+    invalidates: [["visa-placements"]],
+    onSuccess: onClose,
+  })
+  const kinds = [
+    ...VISA_KINDS,
+    ...(form.values.visaKind && !VISA_KINDS.some((kind) => kind === form.values.visaKind)
+      ? [form.values.visaKind]
+      : []),
+  ]
+  const dateProps = (field: "visaAppliedOn" | "visaInterviewOn" | "visaIssuedOn") => ({
+    value: form.values[field],
+    error: form.errors[field],
+    description: hint(field),
+    onChange: (value: string) => form.setFieldValue(field, value),
+  })
 
   return (
+    <form className="stack stack-lg" onSubmit={submit} noValidate>
+      <EditNotice />
+      {formError && <Notice tone="danger">{formError}</Notice>}
+      <div className="grid-2">
+        <DateField label="Tanggal Pengajuan Visa" {...dateProps("visaAppliedOn")} />
+        <DateField label="Tanggal Wawancara Kedutaan" {...dateProps("visaInterviewOn")} />
+      </div>
+      <div className="grid-2">
+        <DateField label="Tanggal Visa Terbit" {...dateProps("visaIssuedOn")} />
+        <TextInput
+          label="Masa Berlaku Visa"
+          placeholder="1 Tahun"
+          description={hint("visaValidity")}
+          {...form.getInputProps("visaValidity")}
+        />
+      </div>
+      <Select
+        label="Jenis Visa"
+        placeholder="Pilih jenis visa"
+        data={kinds}
+        clearable
+        value={form.values.visaKind || null}
+        error={form.errors.visaKind}
+        onChange={(value) => form.setFieldValue("visaKind", value ?? "")}
+      />
+      <FormActions isPending={isPending} onClose={onClose} />
+    </form>
+  )
+}
+
+function PlacementFields({ detail, onClose }: { detail: PlacementDetail; onClose: () => void }) {
+  const hint = proposalHintOf(detail)
+  const hasDeparted = detail.values.departureOn !== null
+  const form = useForm<PlacementForm>({
+    initialValues: formOf(detail.values, PLACEMENT_FIELDS),
+    validate: schemaResolver(placementFormSchema, { sync: true }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) => savePlacement(detail.student.nis, inputOf(values)),
+    successMessage: "Data penempatan tersimpan.",
+    invalidates: [["visa-placements"]],
+    onSuccess: onClose,
+  })
+  const text = (field: "company" | "school" | "fieldOfStudy" | "city" | "state") => ({
+    description: hint(field),
+    ...form.getInputProps(field),
+  })
+  const date = (field: "contractStartsOn" | "contractEndsOn" | "departureOn") => ({
+    value: form.values[field],
+    error: form.errors[field],
+    onChange: (value: string) => form.setFieldValue(field, value),
+  })
+
+  return (
+    <form className="stack stack-lg" onSubmit={submit} noValidate>
+      <EditNotice />
+      {formError && <Notice tone="danger">{formError}</Notice>}
+      <div className="grid-2">
+        <TextInput label="Perusahaan / Betrieb" {...text("company")} />
+        <TextInput label="Sekolah (Berufsschule)" {...text("school")} />
+      </div>
+      <TextInput label="Jurusan Ausbildung" {...text("fieldOfStudy")} />
+      <div className="grid-2">
+        <TextInput label="Kota" {...text("city")} />
+        <TextInput label="Bundesland" {...text("state")} />
+      </div>
+      <div className="grid-2">
+        <DateField
+          label="Tanggal Mulai Kontrak"
+          description={hint("contractStartsOn")}
+          {...date("contractStartsOn")}
+        />
+        <DateField
+          label="Tanggal Selesai Kontrak"
+          description={hint("contractEndsOn")}
+          {...date("contractEndsOn")}
+        />
+      </div>
+      <DateField
+        label="Tanggal Keberangkatan"
+        description={
+          hint("departureOn") ??
+          (hasDeparted
+            ? "Status Alumni sudah menyala; tanggalnya boleh diganti, tidak dapat dikosongkan."
+            : "Mengisi tanggal ini menyalakan status Alumni secara otomatis.")
+        }
+        isClearable={!hasDeparted}
+        {...date("departureOn")}
+      />
+      {!hasDeparted && form.values.departureOn && (
+        <Notice tone="warning">
+          Menyimpan tanggal keberangkatan mengubah status {detail.student.name} menjadi Alumni di
+          seluruh sistem, termasuk halaman Siswa dan portal.
+        </Notice>
+      )}
+      <FormActions isPending={isPending} onClose={onClose} />
+    </form>
+  )
+}
+
+function EditNotice() {
+  return (
+    <Notice tone="info">
+      Yang tersimpan di sini adalah versi yang berlaku dan tercetak. Isian siswa dari portal hanya
+      usulan; kalau ada, ia ditulis di bawah kolom sebagai pembanding. Menyimpan menutup usulan
+      siswa untuk panel ini.
+    </Notice>
+  )
+}
+
+export function AlumniEditModal({
+  detail,
+  section,
+  onClose,
+}: {
+  detail: PlacementDetail
+  section: EditSection
+  onClose: () => void
+}) {
+  return (
     <Modal
-      opened={section !== null}
+      opened
       onClose={onClose}
       title={section === "visa" ? "Ubah Proses Visa" : "Ubah Data Penempatan"}
       size="lg"
       styles={TITLE_STYLE}
     >
-      {section && (
-        <form
-          className="stack stack-lg"
-          onSubmit={(event) => {
-            event.preventDefault()
-            onSave(section, visa, placement)
-            onClose()
-          }}
-        >
-          <Notice tone="info">
-            Yang tersimpan di sini adalah versi yang berlaku dan tercetak. Isian siswa dari portal
-            hanya usulan; kalau ada, ia ditulis di bawah kolom sebagai pembanding.
-          </Notice>
-
-          <DatesProvider settings={{ locale: "id" }}>
-            {section === "visa" ? (
-              <>
-                <div className="grid-2">
-                  <DateInput
-                    label="Tanggal Pengajuan Visa"
-                    description={hint("appliedAt")}
-                    valueFormat="DD MMM YYYY"
-                    value={visa.appliedAt}
-                    onChange={(value) => setVisa({ ...visa, appliedAt: value })}
-                    clearable
-                  />
-                  <DateInput
-                    label="Tanggal Wawancara Kedutaan"
-                    description={hint("interviewAt")}
-                    valueFormat="DD MMM YYYY"
-                    value={visa.interviewAt}
-                    onChange={(value) => setVisa({ ...visa, interviewAt: value })}
-                    clearable
-                  />
-                </div>
-                <div className="grid-2">
-                  <DateInput
-                    label="Tanggal Visa Terbit"
-                    description={hint("issuedAt")}
-                    valueFormat="DD MMM YYYY"
-                    value={visa.issuedAt}
-                    onChange={(value) => setVisa({ ...visa, issuedAt: value })}
-                    clearable
-                  />
-                  <TextInput
-                    label="Masa Berlaku Visa"
-                    placeholder="1 Tahun"
-                    value={visa.validity ?? ""}
-                    onChange={(event) =>
-                      setVisa({ ...visa, validity: event.currentTarget.value || null })
-                    }
-                  />
-                </div>
-                <Select
-                  label="Jenis Visa"
-                  placeholder="Pilih jenis visa"
-                  data={[...VISA_TYPES]}
-                  value={visa.type}
-                  onChange={(value) => setVisa({ ...visa, type: value as VisaData["type"] })}
-                />
-              </>
-            ) : (
-              <>
-                <div className="grid-2">
-                  <TextInput
-                    label="Perusahaan / Betrieb"
-                    description={hint("company")}
-                    value={placement.company}
-                    onChange={(event) =>
-                      setPlacement({ ...placement, company: event.currentTarget.value })
-                    }
-                    required
-                  />
-                  <TextInput
-                    label="Sekolah (Berufsschule)"
-                    description={hint("school")}
-                    value={placement.school}
-                    onChange={(event) =>
-                      setPlacement({ ...placement, school: event.currentTarget.value })
-                    }
-                  />
-                </div>
-                <div className="grid-2">
-                  <TextInput
-                    label="Jurusan Ausbildung"
-                    description={hint("major")}
-                    value={placement.major}
-                    onChange={(event) =>
-                      setPlacement({ ...placement, major: event.currentTarget.value })
-                    }
-                  />
-                  <TextInput
-                    label="Kota / Bundesland"
-                    description={hint("cityState")}
-                    value={placement.cityState}
-                    onChange={(event) =>
-                      setPlacement({ ...placement, cityState: event.currentTarget.value })
-                    }
-                  />
-                </div>
-                <div className="grid-2">
-                  <DateInput
-                    label="Tanggal Mulai Kontrak"
-                    description={hint("contractStart")}
-                    valueFormat="DD MMM YYYY"
-                    value={placement.contractStart}
-                    onChange={(value) => setPlacement({ ...placement, contractStart: value })}
-                    clearable
-                  />
-                  <DateInput
-                    label="Tanggal Selesai Kontrak"
-                    description={hint("contractEnd")}
-                    valueFormat="DD MMM YYYY"
-                    value={placement.contractEnd}
-                    onChange={(value) => setPlacement({ ...placement, contractEnd: value })}
-                    clearable
-                  />
-                </div>
-                <DateInput
-                  label="Tanggal Keberangkatan"
-                  description={
-                    hint("departureAt") ??
-                    "Mengisi tanggal ini menyalakan status Alumni secara otomatis."
-                  }
-                  valueFormat="DD MMM YYYY"
-                  value={placement.departureAt}
-                  onChange={(value) => setPlacement({ ...placement, departureAt: value })}
-                  clearable
-                />
-                {willBecomeAlumni && (
-                  <Notice tone="warning">
-                    Menyimpan tanggal keberangkatan mengubah status {alumnus.name} menjadi Alumni di
-                    seluruh sistem, termasuk halaman Siswa dan portal.
-                  </Notice>
-                )}
-              </>
-            )}
-          </DatesProvider>
-
-          <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Batal
-            </button>
-            <button type="submit" className="btn btn-primary">
-              Simpan
-            </button>
-          </div>
-        </form>
-      )}
+      <DatesProvider settings={{ locale: "id" }}>
+        {section === "visa" ? (
+          <VisaFields detail={detail} onClose={onClose} />
+        ) : (
+          <PlacementFields detail={detail} onClose={onClose} />
+        )}
+      </DatesProvider>
     </Modal>
   )
 }

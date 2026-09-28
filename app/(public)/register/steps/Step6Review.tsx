@@ -2,45 +2,26 @@ import { Delete02Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Box, Button, Checkbox, Group, ScrollArea, Stack, Text } from "@mantine/core"
 import type { UseFormReturnType } from "@mantine/form"
-import { useRef } from "react"
+import { useRef, type RefObject } from "react"
 
-import { formatMoney, subtract } from "@/src/lib/money"
-
-import {
-  DEFAULT_PACKAGE_ID,
-  DOCUMENTS,
-  PACKAGES,
-  REQUIRED_DOCUMENT_COUNT,
-  resolvePromo,
-  TERMS_TEXT,
-  type DocumentKey,
-  type RegistrationValues,
-} from "../data"
-
-type Documents = Record<DocumentKey, File | null>
+import { TERMS_TEXT, type RegistrationValues } from "../data"
 
 export function Step6Review({
   form,
-  documents,
+  summary,
+  canvasRef,
   hasSignature,
+  signatureNote,
   onSignatureChange,
 }: {
   form: UseFormReturnType<RegistrationValues>
-  documents: Documents
+  summary: readonly (readonly [label: string, value: string])[]
+  canvasRef: RefObject<HTMLCanvasElement | null>
   hasSignature: boolean
+  signatureNote?: string
   onSignatureChange: (drawn: boolean) => void
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawing = useRef(false)
-
-  const selectedPackage =
-    PACKAGES.find((p) => p.id === form.values.packageId) ??
-    PACKAGES.find((p) => p.id === DEFAULT_PACKAGE_ID)!
-  const promo = resolvePromo(form.values.promoCode)
-  const priceAfterPromo = promo.valid
-    ? subtract(selectedPackage.price, promo.discount)
-    : selectedPackage.price
-  const uploadedRequired = DOCUMENTS.filter((d) => d.required && documents[d.key]).length
 
   const getPos = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = e.currentTarget
@@ -92,14 +73,7 @@ export function Step6Review({
           Ringkasan Pendaftaran
         </Text>
         <Stack gap="xs">
-          {[
-            ["Nama lengkap", form.values.fullName || "—"],
-            ["Program dan paket", `${selectedPackage.program} - ${selectedPackage.name}`],
-            ["Cabang", form.values.branch || "—"],
-            ["Harga setelah promo", formatMoney(priceAfterPromo)],
-            ["Minimum DP", formatMoney(selectedPackage.dp)],
-            ["Dokumen wajib", `${uploadedRequired} dari ${REQUIRED_DOCUMENT_COUNT} lengkap`],
-          ].map(([label, value]) => (
+          {summary.map(([label, value]) => (
             <Group key={label} justify="space-between">
               <Text size="sm" c="dimmed">
                 {label}
@@ -170,6 +144,11 @@ export function Step6Review({
             onPointerLeave={endDraw}
           />
         </Box>
+        {signatureNote && (
+          <Text size="xs" c="dimmed">
+            {signatureNote}
+          </Text>
+        )}
         {!hasSignature && (
           <Text size="xs" c="tindakan">
             Tanda tangan wajib digambar sebelum mengirim.

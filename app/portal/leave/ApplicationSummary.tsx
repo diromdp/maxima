@@ -1,13 +1,16 @@
+"use client"
+
 import { File01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
-import { formatDateTime } from "@/src/lib/format"
+import { type LeaveDetail, leaveMonths } from "@/src/entities/leave/schema"
+import { previewPresigned } from "@/src/lib/api/download"
+import { formatDateLong, formatDateTime } from "@/src/lib/format"
 
 import { CardHeader } from "./CardHeader"
-import { durationLabel, periodLabel, type LeaveApplication } from "./leave"
 import { SpecList } from "./SpecList"
 
-export function ApplicationSummary({ application }: { application: LeaveApplication }) {
+export function ApplicationSummary({ leave }: { leave: LeaveDetail }) {
   return (
     <section className="card stack">
       <CardHeader title="Ringkasan Pengajuan" />
@@ -15,38 +18,39 @@ export function ApplicationSummary({ application }: { application: LeaveApplicat
       <div className="grid-2">
         <SpecList
           items={[
-            { name: "Nomor Pengajuan", value: application.id },
+            { name: "Nomor Pengajuan", value: leave.number },
             {
               name: "Periode Cuti",
-              value: `${periodLabel(application)} (${durationLabel(application)})`,
+              value: `${formatDateLong(leave.startsOn)} - ${formatDateLong(leave.returnsOn)} (${leaveMonths(leave.startsOn, leave.returnsOn)} bulan)`,
             },
           ]}
         />
         <SpecList
           items={[
-            { name: "Tanggal Pengajuan", value: formatDateTime(application.submittedAt) },
-            { name: "Alasan Cuti", value: application.reason },
+            { name: "Tanggal Pengajuan", value: formatDateTime(leave.submittedAt) },
+            { name: "Alasan Cuti", value: leave.reason },
           ]}
         />
       </div>
 
-      <div className="stack stack-sm">
-        <span className="spec-name">Dokumen Pendukung</span>
-        <div className="row-soft">
-          <span className="row body-sm" style={{ gap: 8, minWidth: 0 }}>
-            <HugeiconsIcon icon={File01Icon} size={16} strokeWidth={1.5} />
-            {application.document.name}
-          </span>
-          <a
-            className="btn btn-secondary btn-sm"
-            href={application.document.href}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Pratinjau
-          </a>
+      {leave.hasEvidence && (
+        <div className="stack stack-sm">
+          <span className="spec-name">Dokumen Pendukung</span>
+          <div className="row-soft">
+            <span className="row body-sm" style={{ gap: 8, minWidth: 0 }}>
+              <HugeiconsIcon icon={File01Icon} size={16} strokeWidth={1.5} />
+              Dokumen Pendukung
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => void previewPresigned(`/leaves/me/${leave.id}/evidence`)}
+            >
+              Pratinjau
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </section>
   )
 }

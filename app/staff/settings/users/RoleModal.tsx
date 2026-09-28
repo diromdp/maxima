@@ -1,98 +1,130 @@
 "use client"
 
-import { Checkbox, Group, Modal, Textarea, TextInput } from "@mantine/core"
-import { notify } from "@/src/lib/notify"
-import { useState } from "react"
+import { Checkbox, Group, Modal, Select, Textarea, TextInput } from "@mantine/core"
+import { schemaResolver, useForm } from "@mantine/form"
 
-import { type Access, PAGES, type PageId, ROLE_ACCESS } from "@/src/lib/auth/permissions"
-
-import type { Role } from "./sample"
+import { Notice } from "@/src/components/ui/Notice"
+import { saveRole } from "@/src/entities/user/actions"
+import {
+  ACCESS_GRANT,
+  CAPABILITIES,
+  HOME_AREAS,
+  type PageRow,
+  type RoleForm,
+  roleFormSchema,
+  type RoleRow,
+  SCOPES,
+} from "@/src/entities/user/schema"
+import type { Access } from "@/src/lib/auth/permissions"
+import { useActionForm } from "@/src/lib/use-action-form"
 
 const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
+const GRANT_ONLY_SUPER_ADMIN = "Hanya super admin yang dapat memberikan kewenangan ini"
 
-type AccessMap = Partial<Record<PageId, Access>>
+const formOf = (role: RoleRow | undefined): RoleForm => ({
+  name: role?.name ?? "",
+  description: role?.description ?? "",
+  homeArea: role?.homeArea ?? null,
+  scope: role?.scope ?? "branch",
+  isActive: role ? role.status === "Aktif" : true,
+  permissions: role?.permissions ?? {},
+  capabilities: role?.capabilities ?? [],
+})
 
-// Kelompok mengikuti urutan sidebar; halaman tanpa kelompok (Dashboard) di atas.
-const GROUPS = [...new Set(PAGES.map((p) => p.group))]
-
-function nextAccess(
-  current: Access | undefined,
-  box: Access,
-  checked: boolean,
-): Access | undefined {
-  if (box === "edit") return checked ? "edit" : current ? "view" : undefined
-  return checked ? (current ?? "view") : undefined
+function nextAccess(current: Access | undefined, box: Access, isChecked: boolean) {
+  if (box === "edit") return isChecked ? "edit" : current ? "view" : undefined
+  return isChecked ? (current ?? "view") : undefined
 }
 
-/**
- * Tambah dan Edit peran dalam satu modal. Hak akses memakai daftar `PAGES`
- * yang sama dengan sidebar, jadi menambah halaman otomatis menambah barisnya.
- * Ubah mencakup Lihat: mencentang Ubah ikut mencentang Lihat, mencabut Lihat
- * mencabut keduanya.
- */
 export function RoleModal({
-  opened,
-  onClose,
   initial,
+  pages,
+  isSuperAdmin,
+  onClose,
 }: {
-  opened: boolean
+  initial?: RoleRow
+  pages: readonly PageRow[]
+  isSuperAdmin: boolean
   onClose: () => void
-  initial?: Role
 }) {
-  const [access, setAccess] = useState<AccessMap>(() =>
-    initial ? { ...ROLE_ACCESS[initial.name] } : {},
-  )
-  const granted = Object.keys(access).length
+  const form = useForm<RoleForm>({
+    initialValues: formOf(initial),
+    validate: schemaResolver(roleFormSchema, { sync: true }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) => saveRole(initial?.id ?? null, values),
+    successMessage: initial ? `Perubahan peran ${initial.name} disimpan.` : "Peran baru disimpan.",
+    invalidates: [["roles"], ["users"]],
+    onSuccess: onClose,
+  })
 
-  const set = (page: PageId, box: Access, checked: boolean) =>
-    setAccess((a) => {
-      const next = { ...a }
-      const value = nextAccess(a[page], box, checked)
-      if (value) next[page] = value
-      else delete next[page]
-      return next
-    })
+  const permissions = form.values.permissions
+  const groups = [...new Set(pages.map((page) => page.menuGroup))]
+
+  const setAccess = (code: string, box: Access, isChecked: boolean) => {
+    const next = { ...permissions }
+    const value = nextAccess(permissions[code], box, isChecked)
+    if (value) next[code] = value
+    else delete next[code]
+    form.setFieldValue("permissions", next)
+  }
+
+  const toggleCapability = (capability: string, isChecked: boolean) =>
+    form.setFieldValue(
+      "capabilities",
+      isChecked
+        ? [...form.values.capabilities, capability]
+        : form.values.capabilities.filter((entry) => entry !== capability),
+    )
 
   return (
     <Modal
-      opened={opened}
+      opened
       onClose={onClose}
       title={initial ? `Ubah Peran ${initial.name}` : "Tambah Peran"}
       size="lg"
       styles={TITLE_STYLE}
     >
-      <form
-        className="stack stack-lg"
-        onSubmit={(e) => {
-          e.preventDefault()
-          notify.success(
-            initial ? `Perubahan peran ${initial.name} disimpan.` : "Peran baru disimpan.",
-          )
-          onClose()
-        }}
-        onReset={onClose}
-      >
+      <form className="stack stack-lg" onSubmit={submit}>
+        {formError && <Notice tone="danger">{formError}</Notice>}
+
         <TextInput
-          name="name"
           label="Nama Peran"
           placeholder="Contoh: Staf Admisi Cabang"
-          defaultValue={initial?.name}
-          required
+          withAsterisk
+          {...form.getInputProps("name")}
         />
         <Textarea
-          name="description"
           label="Deskripsi"
           placeholder="Siapa yang memakai peran ini dan apa batasnya"
-          defaultValue={initial?.description}
           autosize
           minRows={2}
+          {...form.getInputProps("description")}
         />
+
+        <div className="grid-2">
+          <Select
+            label="Wilayah Utama"
+            placeholder="Tanpa wilayah utama"
+            data={[...HOME_AREAS]}
+            clearable
+            {...form.getInputProps("homeArea")}
+          />
+          <Select
+            label="Cakupan Baris"
+            data={[...SCOPES]}
+            withAsterisk
+            allowDeselect={false}
+            {...form.getInputProps("scope")}
+          />
+        </div>
 
         <div className="stack stack-sm">
           <div className="row row-between">
             <span className="label">Hak Akses</span>
             <span className="caption text-muted tabular">
-              {granted} dari {PAGES.length} halaman
+              {Object.keys(permissions).length} dari {pages.length} halaman
             </span>
           </div>
 
@@ -110,32 +142,38 @@ export function RoleModal({
                 </tr>
               </thead>
               <tbody>
-                {GROUPS.map((group) => (
+                {groups.map((group) => (
                   <RowGroup key={group ?? "root"} title={group}>
-                    {PAGES.filter((p) => p.group === group).map((p) => {
-                      const level = access[p.id]
-                      return (
-                        <tr key={p.id}>
-                          <td>{p.label}</td>
-                          <td className="numeric">
-                            <Checkbox
-                              aria-label={`Lihat ${p.label}`}
-                              checked={level !== undefined}
-                              onChange={(e) => set(p.id, "view", e.currentTarget.checked)}
-                              style={{ display: "inline-flex" }}
-                            />
-                          </td>
-                          <td className="numeric">
-                            <Checkbox
-                              aria-label={`Ubah ${p.label}`}
-                              checked={level === "edit"}
-                              onChange={(e) => set(p.id, "edit", e.currentTarget.checked)}
-                              style={{ display: "inline-flex" }}
-                            />
-                          </td>
-                        </tr>
-                      )
-                    })}
+                    {pages
+                      .filter((page) => page.menuGroup === group)
+                      .map((page) => {
+                        const level = permissions[page.code]
+                        return (
+                          <tr key={page.code}>
+                            <td>{page.label}</td>
+                            <td className="numeric">
+                              <Checkbox
+                                aria-label={`Lihat ${page.label}`}
+                                checked={level !== undefined}
+                                onChange={(e) =>
+                                  setAccess(page.code, "view", e.currentTarget.checked)
+                                }
+                                style={{ display: "inline-flex" }}
+                              />
+                            </td>
+                            <td className="numeric">
+                              <Checkbox
+                                aria-label={`Ubah ${page.label}`}
+                                checked={level === "edit"}
+                                onChange={(e) =>
+                                  setAccess(page.code, "edit", e.currentTarget.checked)
+                                }
+                                style={{ display: "inline-flex" }}
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
                   </RowGroup>
                 ))}
               </tbody>
@@ -143,12 +181,37 @@ export function RoleModal({
           </div>
         </div>
 
+        <div className="stack stack-sm">
+          <span className="label">Kemampuan</span>
+          <div className="grid-2">
+            {CAPABILITIES.map(({ value, label }) => {
+              const isGrant = value === ACCESS_GRANT
+              return (
+                <Checkbox
+                  key={value}
+                  label={label}
+                  description={isGrant && !isSuperAdmin ? GRANT_ONLY_SUPER_ADMIN : undefined}
+                  disabled={isGrant && !isSuperAdmin}
+                  checked={form.values.capabilities.includes(value)}
+                  onChange={(e) => toggleCapability(value, e.currentTarget.checked)}
+                />
+              )
+            })}
+          </div>
+        </div>
+
+        <Checkbox
+          label="Aktif"
+          description="Peran nonaktif tidak dapat dipilih untuk pengguna baru."
+          {...form.getInputProps("isActive", { type: "checkbox" })}
+        />
+
         <Group justify="flex-end">
-          <button type="reset" className="btn btn-secondary">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
             Batal
           </button>
-          <button type="submit" className="btn btn-primary">
-            Simpan Peran
+          <button type="submit" className="btn btn-primary" disabled={isPending}>
+            {isPending ? "Menyimpan..." : "Simpan Peran"}
           </button>
         </Group>
       </form>

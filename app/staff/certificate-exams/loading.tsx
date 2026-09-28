@@ -1,6 +1,6 @@
 import { Skeleton } from "@mantine/core"
 
-import { CERTIFICATES } from "./sample"
+const SKELETON_ROWS = 6
 
 export default function Loading() {
   return (
@@ -28,8 +28,8 @@ export default function Loading() {
           <Skeleton height={36} width={160} radius="xl" />
         </div>
         <div className="stack stack-sm">
-          {CERTIFICATES.map((certificate) => (
-            <Skeleton key={certificate.id} height={60} radius="sm" />
+          {Array.from({ length: SKELETON_ROWS }, (_, index) => (
+            <Skeleton key={index} height={60} radius="sm" />
           ))}
         </div>
       </section>

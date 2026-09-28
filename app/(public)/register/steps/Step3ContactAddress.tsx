@@ -1,43 +1,18 @@
 import { Grid, GridCol, TextInput } from "@mantine/core"
 import type { UseFormReturnType } from "@mantine/form"
 
+import { PhoneInput } from "@/src/components/ui/PhoneInput"
+
 import type { RegistrationValues } from "../data"
 
 export function Step3ContactAddress({ form }: { form: UseFormReturnType<RegistrationValues> }) {
   return (
     <Grid gap="md">
       <GridCol span={{ base: 12, sm: 6 }}>
-        <TextInput
-          label="Nomor HP Pribadi"
-          withAsterisk
-          placeholder="08xxxxxxxxx"
-          {...form.getInputProps("phonePersonal")}
-        />
+        <PhoneInput label="Nomor HP Ibu" withAsterisk {...form.getInputProps("phoneMother")} />
       </GridCol>
       <GridCol span={{ base: 12, sm: 6 }}>
-        <TextInput
-          label="Nomor WhatsApp Aktif"
-          withAsterisk
-          placeholder="Dipakai untuk pengingat pembayaran"
-          {...form.getInputProps("whatsapp")}
-        />
-      </GridCol>
-
-      <GridCol span={{ base: 12, sm: 6 }}>
-        <TextInput
-          label="Nomor HP Ibu"
-          withAsterisk
-          placeholder="08xxxxxxxxx"
-          {...form.getInputProps("phoneMother")}
-        />
-      </GridCol>
-      <GridCol span={{ base: 12, sm: 6 }}>
-        <TextInput
-          label="Nomor HP Ayah"
-          withAsterisk
-          placeholder="08xxxxxxxxx"
-          {...form.getInputProps("phoneFather")}
-        />
+        <PhoneInput label="Nomor HP Ayah" withAsterisk {...form.getInputProps("phoneFather")} />
       </GridCol>
 
       <GridCol span={12}>
@@ -100,10 +75,9 @@ export function Step3ContactAddress({ form }: { form: UseFormReturnType<Registra
         />
       </GridCol>
       <GridCol span={{ base: 12, sm: 4 }}>
-        <TextInput
+        <PhoneInput
           label="Nomor Kontak Darurat"
           withAsterisk
-          placeholder="08xxxxxxxxx"
           {...form.getInputProps("emergencyContactPhone")}
         />
       </GridCol>

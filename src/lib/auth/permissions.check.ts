@@ -1,39 +1,44 @@
 import assert from "node:assert/strict"
 
-import { canEdit, canView, menuFor, PAGES, ROLE_ACCESS, type StaffPage } from "./permissions.ts"
+import {
+  canEdit,
+  canView,
+  menuFor,
+  PAGES,
+  type Permissions,
+  type StaffPage,
+} from "./permissions.ts"
 
-const flat = (role: string) => menuFor(role).flatMap((s) => s.items.map((i) => i.label))
+const labels = (permissions: Permissions) =>
+  menuFor(permissions).flatMap((section) => section.items.map((item) => item.label))
 
-for (const role of Object.keys(ROLE_ACCESS)) {
-  assert.ok(canView(role, "home"), `${role} tidak melihat Dashboard`)
-  assert.equal(
-    menuFor(role)[0]?.items[0]?.label,
-    "Dashboard",
-    `Dashboard bukan butir pertama ${role}`,
-  )
+const everything: Permissions = Object.fromEntries(PAGES.map((page) => [page.id, "edit"]))
+const marketing: Permissions = {
+  home: "view",
+  students: "view",
+  registrations: "edit",
+  documents: "view",
+  partners: "view",
 }
 
+assert.equal(menuFor(everything)[0]?.items[0]?.label, "Dashboard")
 assert.equal(
-  flat("Admission").length,
-  (PAGES as readonly StaffPage[]).filter((p) => !p.hidden).length,
+  labels(everything).length,
+  (PAGES as readonly StaffPage[]).filter((page) => !page.hidden).length,
 )
-assert.ok(!flat("Admission").includes("Pendaftaran Siswa"))
-assert.ok(canEdit("Admission", "registrations"))
-assert.deepEqual(menuFor("Peran Karangan"), [])
+assert.ok(!labels(everything).includes("Pendaftaran Siswa"))
+assert.deepEqual(menuFor({}), [])
 
-const marketing = menuFor("Marketing")
-assert.ok(!flat("Marketing").includes("Pengguna & Hak Akses"))
-assert.ok(!marketing.some((s) => s.group === "Akademik"))
 assert.deepEqual(
-  marketing.map((s) => s.group),
-  // Siswa sendirian di Kesiswaan (Pendaftaran disembunyikan) - kelompok satu butir tanpa judul.
-  [null, null, "Pemberkasan & Penempatan"],
+  menuFor(marketing).map((section) => section.group),
+  [null, "Kesiswaan", "Pemberkasan & Penempatan"],
 )
+assert.ok(!labels(marketing).includes("Pengguna & Hak Akses"))
 
-const pengaturan = menuFor("Admission").at(-1)!
-assert.equal(pengaturan.group, "Pengaturan")
+const settings = menuFor(everything).at(-1)
+assert.equal(settings?.group, "Pengaturan")
 assert.deepEqual(
-  pengaturan.items.map((i) => [i.label, i.href]),
+  settings?.items.map((item) => [item.label, item.href]),
   [
     ["Pengguna & Hak Akses", "/staff/settings/users"],
     ["Master Data", "/staff/settings/master-data"],
@@ -41,9 +46,9 @@ assert.deepEqual(
     ["Log Aktivitas", "/staff/settings/activity-log"],
   ],
 )
-assert.ok(!flat("Staf Finance").includes("Master Data"))
 
-assert.ok(canEdit("Pengajar", "assessments"))
-assert.ok(canView("Pengajar", "students") && !canEdit("Pengajar", "students"))
+assert.ok(canEdit(marketing, "registrations"))
+assert.ok(canView(marketing, "students") && !canEdit(marketing, "students"))
+assert.ok(!canView(marketing, "payments"))
 
 console.log("permissions: semua pemeriksaan lolos")

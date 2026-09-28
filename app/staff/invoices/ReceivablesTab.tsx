@@ -1,39 +1,92 @@
 "use client"
 
-import { Select } from "@mantine/core"
-import { useState } from "react"
-
-import { DataTable } from "@/src/components/data/DataTable"
+import { ListFilter } from "@/src/components/data/ListFilter"
+import { QueryError } from "@/src/components/data/QueryError"
+import { ServerDataTable } from "@/src/components/data/ServerDataTable"
+import type { DataColumn } from "@/src/components/data/TableFrame"
 import { Notice } from "@/src/components/ui/Notice"
+import { receivablesQuery } from "@/src/entities/invoice/queries"
+import {
+  RECEIVABLE_FILTERS,
+  STUDENT_STATUSES,
+  type ReceivableRow,
+} from "@/src/entities/invoice/schema"
+import { useMasterOptions } from "@/src/entities/master-data/use-master-options"
+import { useRead } from "@/src/lib/api/use-read"
 import { DASH, formatDate } from "@/src/lib/format"
-import { formatMoney, type Money } from "@/src/lib/money"
+import { useListParams } from "@/src/lib/use-list-params"
 
-import { BRANCHES } from "../classes/sample"
-import { type Receivable, RECEIVABLES } from "./sample"
+import { euro, rupiah } from "./format"
 
-const ALL = "Semua"
+const owed = (value: string, isOwed: boolean) => (
+  <span className={isOwed ? "text-danger" : undefined}>{value}</span>
+)
 
-const STATUSES = Array.from(new Set(RECEIVABLES.map((row) => row.student.status)))
-
-const due = (value: Money | null) =>
-  value === null ? (
-    <span className="text-muted">{DASH}</span>
-  ) : (
-    <span className={value.amount > 0 ? "text-danger" : ""}>{formatMoney(value)}</span>
-  )
-
-const optional = (value: Money | null) =>
-  value === null ? <span className="text-muted">{DASH}</span> : formatMoney(value)
+const COLUMNS: readonly DataColumn<ReceivableRow>[] = [
+  {
+    key: "name",
+    header: "Nama Siswa",
+    cell: (row) => (
+      <div className="stack" style={{ gap: 2, alignItems: "flex-start" }}>
+        <span style={{ fontWeight: 600 }}>{row.name}</span>
+        <span className="caption text-muted">
+          {row.nis} · {row.studentStatus}
+        </span>
+        {row.needsDifferenceBilling && (
+          <span
+            className="badge badge-warning"
+            title="Kembali dari cuti ke level lebih rendah. Nominal selisih dihitung Finance."
+          >
+            Perlu Tagihan Selisih
+          </span>
+        )}
+      </div>
+    ),
+  },
+  { key: "package", header: "Paket", cell: (row) => row.package.name },
+  { key: "priceIdr", header: "Harga (IDR)", align: "right", cell: (row) => rupiah(row.priceIdr) },
+  { key: "paidIdr", header: "Dibayar (IDR)", align: "right", cell: (row) => rupiah(row.paidIdr) },
+  {
+    key: "remainingIdr",
+    header: "Piutang (IDR)",
+    align: "right",
+    cell: (row) => owed(rupiah(row.remainingIdr), row.remainingIdr > 0),
+  },
+  {
+    key: "priceEur",
+    header: "Harga (EURO)",
+    align: "right",
+    cell: (row) => euro(row.priceEurCents),
+  },
+  {
+    key: "paidEur",
+    header: "Dibayar (EURO)",
+    align: "right",
+    cell: (row) => (row.priceEurCents === null ? DASH : euro(row.paidEurCents)),
+  },
+  {
+    key: "remainingEur",
+    header: "Piutang (EURO)",
+    align: "right",
+    cell: (row) => owed(euro(row.remainingEurCents), (row.remainingEurCents ?? 0) > 0),
+  },
+  {
+    key: "lastPaid",
+    header: "Terakhir Bayar",
+    cell: (row) => (row.lastPaidOn ? formatDate(row.lastPaidOn) : DASH),
+  },
+  {
+    key: "transactions",
+    header: "TRX",
+    align: "right",
+    cell: (row) => <span className="tabular">{row.transactionCount}</span>,
+  },
+]
 
 export function ReceivablesTab() {
-  const [branch, setBranch] = useState(ALL)
-  const [status, setStatus] = useState(ALL)
-
-  const rows = RECEIVABLES.filter(
-    (row) =>
-      (branch === ALL || row.student.branch === branch) &&
-      (status === ALL || row.student.status === status),
-  )
+  const { params } = useListParams(RECEIVABLE_FILTERS)
+  const receivables = useRead(receivablesQuery(params))
+  const { branches } = useMasterOptions()
 
   return (
     <div className="stack stack-lg">
@@ -44,112 +97,36 @@ export function ReceivablesTab() {
 
       <section className="card stack">
         <div className="row row-between row-wrap" style={{ alignItems: "flex-end" }}>
-          <div className="row row-wrap" style={{ gap: 12 }}>
-            <Select
-              label="Cabang"
-              size="sm"
-              w={160}
-              allowDeselect={false}
-              data={[ALL, ...BRANCHES]}
-              value={branch}
-              onChange={(value) => value && setBranch(value)}
-            />
-            <Select
+          <div className="row row-wrap" style={{ gap: 8 }}>
+            <ListFilter name="branch" label="Cabang" options={branches} />
+            <ListFilter
+              name="status"
               label="Status Program"
-              size="sm"
-              w={180}
-              allowDeselect={false}
-              data={[ALL, ...STATUSES]}
-              value={status}
-              onChange={(value) => value && setStatus(value)}
+              options={STUDENT_STATUSES.map((status) => ({ value: status, label: status }))}
             />
           </div>
-          <span className="caption text-muted">{rows.length} siswa</span>
+          {receivables.data && (
+            <span className="caption text-muted tabular">
+              {receivables.data.meta.total} kontrak
+            </span>
+          )}
         </div>
 
-        <DataTable<Receivable>
-          rows={rows}
-          rowKey={(row) => row.student.nis}
-          defaultSort={{ key: "piutang-idr", dir: "desc" }}
-          columns={[
-            {
-              key: "nama",
-              header: "Nama Siswa",
-              sort: (row) => row.student.name,
-              cell: (row) => (
-                <div className="stack" style={{ gap: 0 }}>
-                  <span style={{ fontWeight: 600 }}>{row.student.name}</span>
-                  <span className="caption text-muted">
-                    {row.student.nis} · {row.student.status}
-                  </span>
-                </div>
-              ),
-            },
-            {
-              key: "paket",
-              header: "Paket",
-              sort: (row) => row.pkg.name,
-              cell: (row) => row.pkg.name,
-            },
-            {
-              key: "harga-idr",
-              header: "Harga (IDR)",
-              align: "right",
-              cell: (row) => formatMoney(row.priceIdr),
-            },
-            {
-              key: "dibayar-idr",
-              header: "Dibayar (IDR)",
-              align: "right",
-              sort: (row) => row.paidIdr.amount,
-              cell: (row) => formatMoney(row.paidIdr),
-            },
-            {
-              key: "piutang-idr",
-              header: "Piutang (IDR)",
-              align: "right",
-              sort: (row) => row.dueIdr.amount,
-              cell: (row) => due(row.dueIdr),
-            },
-            {
-              key: "harga-eur",
-              header: "Harga (EURO)",
-              align: "right",
-              cell: (row) => optional(row.priceEur),
-            },
-            {
-              key: "dibayar-eur",
-              header: "Dibayar (EURO)",
-              align: "right",
-              cell: (row) => (row.priceEur ? formatMoney(row.paidEur) : optional(null)),
-            },
-            {
-              key: "piutang-eur",
-              header: "Piutang (EURO)",
-              align: "right",
-              sort: (row) => row.dueEur?.amount ?? -1,
-              cell: (row) => due(row.dueEur),
-            },
-            {
-              key: "terakhir",
-              header: "Terakhir Bayar",
-              sort: (row) => row.lastPaid ?? "",
-              cell: (row) =>
-                row.lastPaid ? (
-                  formatDate(row.lastPaid)
-                ) : (
-                  <span className="text-muted">{DASH}</span>
-                ),
-            },
-            {
-              key: "trx",
-              header: "TRX",
-              align: "right",
-              sort: (row) => row.transactionCount,
-              cell: (row) => row.transactionCount,
-            },
-          ]}
-        />
+        {receivables.isError ? (
+          <QueryError
+            message={receivables.error.message}
+            onRetry={() => void receivables.refetch()}
+          />
+        ) : (
+          <ServerDataTable
+            rows={receivables.data?.data ?? []}
+            total={receivables.data?.meta.total ?? 0}
+            isPending={receivables.isPending}
+            columns={COLUMNS}
+            rowKey={(row) => row.contractId}
+            emptyText="Tidak ada piutang pada saringan ini."
+          />
+        )}
       </section>
     </div>
   )

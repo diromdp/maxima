@@ -1,19 +1,18 @@
 "use client"
 
+import { useState } from "react"
+
 import { DataTable, type DataColumn } from "@/src/components/data/DataTable"
+import type { DocumentItem, DocumentState } from "@/src/entities/document/schema"
+import { previewPresigned } from "@/src/lib/api/download"
 import { DASH, formatDate } from "@/src/lib/format"
 
-import {
-  canDownload,
-  canUpload,
-  isLocked,
-  type DocumentGroup,
-  type FileItem,
-  type FileStatus,
-} from "./documents"
 import { UploadModal } from "./UploadModal"
 
-const BADGE: Readonly<Record<FileStatus, string>> = {
+export type PortalFileStatus =
+  "Terverifikasi" | "Selesai" | "Menunggu" | "Diproses" | "Belum diunggah" | "Ditolak"
+
+export const STATUS_BADGE: Readonly<Record<PortalFileStatus, string>> = {
   Terverifikasi: "badge-beres",
   Selesai: "badge-beres",
   Menunggu: "badge-berjalan",
@@ -22,68 +21,104 @@ const BADGE: Readonly<Record<FileStatus, string>> = {
   Ditolak: "badge-tindakan",
 }
 
-export function DocumentTable({
-  group,
-  hasVertrag,
-}: {
-  group: DocumentGroup
-  hasVertrag: boolean
-}) {
-  const statuses = [...new Set(group.files.map((b) => b.status))]
+const STATUS_OF: Readonly<Record<DocumentState, PortalFileStatus>> = {
+  Lengkap: "Terverifikasi",
+  "Perlu Verifikasi": "Menunggu",
+  Diproses: "Diproses",
+  Ditolak: "Ditolak",
+  "Belum Diunggah": "Belum diunggah",
+}
 
-  const columns: readonly DataColumn<FileItem>[] = [
+const LEAVE_REASON = "Unggahan dibuka lagi setelah masa cuti Anda selesai."
+
+export const isUploadedByStudent = (item: DocumentItem) => item.producer === "student"
+
+export const portalStatusOf = (item: DocumentItem): PortalFileStatus =>
+  item.state === "Lengkap" && !isUploadedByStudent(item) ? "Selesai" : STATUS_OF[item.state]
+
+export function DocumentTable({
+  items,
+  isOnLeave,
+}: {
+  items: readonly DocumentItem[]
+  isOnLeave: boolean
+}) {
+  const [uploading, setUploading] = useState<DocumentItem | null>(null)
+  const statuses = [...new Set(items.map(portalStatusOf))]
+
+  const columns: readonly DataColumn<DocumentItem>[] = [
     {
-      key: "dokumen",
+      key: "document",
       header: "Dokumen",
       wrap: true,
-      sort: (b) => b.name,
-      cell: (b) => (
+      sort: (item) => item.name,
+      cell: (item) => (
         <div className="stack stack-sm">
-          <span>{b.name}</span>
-          {b.status === "Ditolak" && b.reason && (
-            <span className="caption text-danger">{b.reason}</span>
+          <span>
+            {item.name}
+            {item.isOptional && <span className="caption text-muted"> (opsional)</span>}
+          </span>
+          {item.state === "Ditolak" && item.rejectReason && (
+            <span className="caption text-danger">{item.rejectReason}</span>
           )}
         </div>
       ),
     },
     {
-      key: "tanggal",
+      key: "date",
       header: "Tanggal",
-      sort: (b) => b.date ?? "",
-      cell: (b) => (b.date ? formatDate(b.date) : DASH),
+      sort: (item) => item.uploadedAt ?? "",
+      cell: (item) => (item.uploadedAt ? formatDate(item.uploadedAt) : DASH),
     },
     {
       key: "status",
       header: "Status",
-      sort: (b) => b.status,
-      cell: (b) => <span className={`badge ${BADGE[b.status]}`}>{b.status}</span>,
+      sort: portalStatusOf,
+      cell: (item) => {
+        const status = portalStatusOf(item)
+        const badge =
+          !isUploadedByStudent(item) && status === "Belum diunggah"
+            ? "badge-terkunci"
+            : STATUS_BADGE[status]
+        return <span className={`badge ${badge}`}>{status}</span>
+      },
     },
     {
-      key: "aksi",
+      key: "actions",
       header: "Aksi",
-      cell: (b) => (
-        <div className="row">
-          {canDownload(b) && (
-            <a className="link" href={`/files/${b.source ?? b.name}`} download>
+      cell: (item) => (
+        <div className="row row-wrap">
+          {item.objectKey && (
+            <button
+              type="button"
+              className="link"
+              onClick={() => void previewPresigned("/downloads/presign", { key: item.objectKey })}
+            >
               Unduh
-            </a>
+            </button>
           )}
-          {canUpload(group, b, hasVertrag) && (
-            <UploadModal
-              name={b.name}
-              kind={b.kind ?? "pdf"}
-              replace={b.status !== "Belum diunggah"}
-              verified={b.status === "Terverifikasi"}
-              currentFile={b.status !== "Belum diunggah" ? b.name : undefined}
-            />
+          {isUploadedByStudent(item) && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={isOnLeave}
+              title={isOnLeave ? LEAVE_REASON : undefined}
+              onClick={() => setUploading(item)}
+            >
+              {item.state === "Belum Diunggah" ? "Unggah" : "Ganti"}
+            </button>
           )}
-          {group.role === "download" && b.status === "Diproses" && (
+          {!isUploadedByStudent(item) && item.state === "Diproses" && (
             <span className="caption text-muted wrap">
               Dikerjakan Maxima, lihat Progres Administrasi
             </span>
           )}
-          {isLocked(group, hasVertrag) && (
-            <span className="caption text-muted">Terbuka setelah Dapat Vertrag</span>
+          {!isUploadedByStudent(item) && item.state === "Belum Diunggah" && (
+            <span className="caption text-muted wrap">
+              {item.producer === "admission"
+                ? "Diunggah Admission setelah partner mengirimkannya"
+                : "Tersedia setelah layanannya selesai dikerjakan Maxima"}
+            </span>
           )}
         </div>
       ),
@@ -91,11 +126,15 @@ export function DocumentTable({
   ]
 
   return (
-    <DataTable
-      rows={group.files}
-      columns={columns}
-      rowKey={(b) => b.name}
-      filter={statuses.length > 1 ? { value: (b) => b.status, options: statuses } : undefined}
-    />
+    <>
+      <DataTable
+        rows={items}
+        columns={columns}
+        rowKey={(item) => item.code ?? item.name}
+        filter={statuses.length > 1 ? { value: portalStatusOf, options: statuses } : undefined}
+        emptyText="Belum ada berkas di kelompok ini."
+      />
+      {uploading && <UploadModal item={uploading} onClose={() => setUploading(null)} />}
+    </>
   )
 }

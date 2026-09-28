@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   agentRules: false,
   experimental: {
+    serverActions: { bodySizeLimit: "3mb" },
     optimizePackageImports: ["@mantine/core", "@mantine/hooks", "@tabler/icons-react"],
   },
 }

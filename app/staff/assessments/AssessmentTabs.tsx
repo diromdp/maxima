@@ -1,36 +1,74 @@
 "use client"
 
-import { Select, Tabs, TextInput } from "@mantine/core"
-import { useState } from "react"
+import { Select, Skeleton, Tabs, TextInput } from "@mantine/core"
+
+import { QueryError } from "@/src/components/data/QueryError"
+import { ScrollableTabsList } from "@/src/components/ui/ScrollableTabsList"
+import { assessmentFiltersQuery, assessmentSheetQuery } from "@/src/entities/assessment/queries"
+import type { AssessmentFilters, SheetKey } from "@/src/entities/assessment/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { useUrlParam } from "@/src/lib/use-url-param"
 
 import { AttitudeTab } from "./AttitudeTab"
 import { ChapterScoresTab } from "./ChapterScoresTab"
 import { InternalExamsTab } from "./InternalExamsTab"
 import { NotesTab } from "./NotesTab"
-import { CLASSES, classLabel, KKM, PERIODS, STUDENTS_BY_CLASS } from "./sample"
+import { SheetSkeleton } from "./SheetSkeleton"
 
-const TAB_VALUES = ["chapters", "exams", "attitude", "notes"] as const
-type TabValue = (typeof TAB_VALUES)[number]
+const TABS = [
+  { value: "chapters", label: "Nilai Kapitel" },
+  { value: "exams", label: "Ujian Internal" },
+  { value: "attitude", label: "Sikap & Karakter" },
+  { value: "notes", label: "Deskripsi & Catatan" },
+] as const
 
-const TAB_LABELS: Readonly<Record<TabValue, string>> = {
-  chapters: "Nilai Kapitel",
-  exams: "Ujian Internal",
-  attitude: "Sikap & Karakter",
-  notes: "Deskripsi & Catatan",
+type Access = { readOnly: boolean; canDownloadReport: boolean }
+
+export function AssessmentTabs(access: Access) {
+  const filters = useRead(assessmentFiltersQuery())
+
+  if (filters.isError) {
+    return <QueryError message={filters.error.message} onRetry={() => void filters.refetch()} />
+  }
+  if (filters.isPending) return <FiltersSkeleton />
+
+  const { classes, periods } = filters.data
+  if (classes.length === 0 || periods.length === 0) {
+    return (
+      <section className="card">
+        <p className="body-sm text-muted">
+          {classes.length === 0
+            ? "Belum ada kelas aktif dalam cakupanmu. Kelas berstatus Draft baru muncul di sini setelah diaktifkan di halaman Kelas & Jadwal."
+            : "Belum ada periode akademik aktif. Tambahkan periodenya di halaman Kelas & Jadwal, tab Periode Akademik."}
+        </p>
+      </section>
+    )
+  }
+
+  return <AssessmentSheetView filters={filters.data} {...access} />
 }
 
-export function AssessmentTabs({
-  initialTab,
+function AssessmentSheetView({
+  filters,
   readOnly,
-}: {
-  initialTab?: string
-  readOnly: boolean
-}) {
-  const [classId, setClassId] = useState(CLASSES[0].id)
-  const [period, setPeriod] = useState<string>(PERIODS[0])
-  const room = CLASSES.find((candidate) => candidate.id === classId) ?? CLASSES[0]
-  const studentCount = (STUDENTS_BY_CLASS[room.id] ?? []).length
-  const initial = TAB_VALUES.find((value) => value === initialTab) ?? TAB_VALUES[0]
+  canDownloadReport,
+}: Access & { filters: AssessmentFilters }) {
+  const { classes, periods, defaultPeriodId } = filters
+  const [classId, setClassId] = useUrlParam("class", classes[0]!.id, (value) =>
+    classes.some((room) => room.id === value),
+  )
+  const [periodId, setPeriodId] = useUrlParam(
+    "period",
+    defaultPeriodId ?? periods[0]!.id,
+    (value) => periods.some((period) => period.id === value),
+  )
+  const [tab, setTab] = useUrlParam("tab", TABS[0].value, (value) =>
+    TABS.some((candidate) => candidate.value === value),
+  )
+  const room = classes.find((candidate) => candidate.id === classId) ?? classes[0]!
+  const sheetKey: SheetKey = { classId: room.id, periodId }
+  const sheet = useRead(assessmentSheetQuery(sheetKey))
+  const tabKey = `${room.id}-${periodId}`
 
   return (
     <div className="stack">
@@ -42,9 +80,10 @@ export function AssessmentTabs({
               size="sm"
               w={220}
               allowDeselect={false}
-              data={CLASSES.map((candidate) => ({
+              searchable
+              data={classes.map((candidate) => ({
                 value: candidate.id,
-                label: classLabel(candidate),
+                label: `${candidate.name} (${candidate.level.name})`,
               }))}
               value={room.id}
               onChange={(value) => value && setClassId(value)}
@@ -54,46 +93,108 @@ export function AssessmentTabs({
               size="sm"
               w={140}
               readOnly
-              value={`Deutsch ${room.level}`}
+              value={`Deutsch ${room.level.name}`}
             />
             <Select
               label="Periode"
               size="sm"
               w={160}
               allowDeselect={false}
-              data={[...PERIODS]}
-              value={period}
-              onChange={(value) => value && setPeriod(value)}
+              data={periods.map((period) => ({ value: period.id, label: period.name }))}
+              value={periodId}
+              onChange={(value) => value && setPeriodId(value)}
             />
           </div>
-          <span className="body-sm text-muted">
-            {studentCount} siswa · KKM {KKM}
-          </span>
+          {sheet.isSuccess ? (
+            <span className="body-sm text-muted">
+              {sheet.data.students.length} siswa · KKM {sheet.data.kkm ?? "-"}
+            </span>
+          ) : (
+            <Skeleton height={16} width={120} radius="xl" aria-hidden />
+          )}
         </div>
       </section>
 
-      <Tabs defaultValue={initial} keepMounted={false}>
-        <Tabs.List mb="lg">
-          {TAB_VALUES.map((value) => (
+      <Tabs value={tab} onChange={(value) => value && setTab(value)}>
+        <ScrollableTabsList>
+          {TABS.map(({ value, label }) => (
             <Tabs.Tab key={value} value={value}>
-              {TAB_LABELS[value]}
+              {label}
             </Tabs.Tab>
           ))}
-        </Tabs.List>
+        </ScrollableTabsList>
 
-        <Tabs.Panel value="chapters">
-          <ChapterScoresTab key={`${room.id}-${period}`} room={room} readOnly={readOnly} />
-        </Tabs.Panel>
-        <Tabs.Panel value="exams">
-          <InternalExamsTab key={`${room.id}-${period}`} room={room} readOnly={readOnly} />
-        </Tabs.Panel>
-        <Tabs.Panel value="attitude">
-          <AttitudeTab key={`${room.id}-${period}`} room={room} readOnly={readOnly} />
-        </Tabs.Panel>
-        <Tabs.Panel value="notes">
-          <NotesTab key={`${room.id}-${period}`} room={room} period={period} readOnly={readOnly} />
-        </Tabs.Panel>
+        {sheet.isError ? (
+          <div style={{ marginTop: 16 }}>
+            <QueryError message={sheet.error.message} onRetry={() => void sheet.refetch()} />
+          </div>
+        ) : sheet.isPending ? (
+          <div style={{ marginTop: 16 }}>
+            <SheetSkeleton />
+          </div>
+        ) : sheet.data.students.length === 0 ? (
+          <section className="card" style={{ marginTop: 16 }}>
+            <p className="body-sm text-muted">
+              Belum ada siswa aktif di {room.name}. Tambahkan anggotanya di halaman Kelas &amp;
+              Jadwal, tab Anggota Kelas.
+            </p>
+          </section>
+        ) : (
+          <>
+            <Tabs.Panel value="chapters">
+              <ChapterScoresTab
+                key={tabKey}
+                sheet={sheet.data}
+                sheetKey={sheetKey}
+                readOnly={readOnly}
+              />
+            </Tabs.Panel>
+            <Tabs.Panel value="exams">
+              <InternalExamsTab
+                key={tabKey}
+                sheet={sheet.data}
+                sheetKey={sheetKey}
+                readOnly={readOnly}
+              />
+            </Tabs.Panel>
+            <Tabs.Panel value="attitude">
+              <AttitudeTab
+                key={tabKey}
+                sheet={sheet.data}
+                sheetKey={sheetKey}
+                readOnly={readOnly}
+              />
+            </Tabs.Panel>
+            <Tabs.Panel value="notes">
+              <NotesTab
+                key={tabKey}
+                sheet={sheet.data}
+                sheetKey={sheetKey}
+                readOnly={readOnly}
+                canDownloadReport={canDownloadReport}
+              />
+            </Tabs.Panel>
+          </>
+        )}
       </Tabs>
+    </div>
+  )
+}
+
+function FiltersSkeleton() {
+  return (
+    <div className="stack" aria-busy="true">
+      <span className="sr-only" role="status">
+        Memuat
+      </span>
+      <section className="card" aria-hidden>
+        <div className="row row-wrap" style={{ gap: 12 }}>
+          <Skeleton height={36} width={220} radius="xl" />
+          <Skeleton height={36} width={140} radius="xl" />
+          <Skeleton height={36} width={160} radius="xl" />
+        </div>
+      </section>
+      <SheetSkeleton />
     </div>
   )
 }

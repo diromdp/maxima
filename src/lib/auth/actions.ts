@@ -3,38 +3,125 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
+import { actionOf, api, ApiError, type ActionResult } from "@/src/lib/api/client"
+
+import type { PasswordForm } from "./password"
 import {
-  BYPASS_SESSION,
-  decodeSession,
-  encodeSession,
+  ACCESS_COOKIE,
   homePath,
   loginPath,
-  SESSION_COOKIE,
+  readClaims,
+  REFRESH_COOKIE,
+  tokenCookieOptions,
   type SessionKind,
-} from "./session"
+  type TokenPair,
+} from "./tokens"
 
-export type LoginResult = { error: string } | undefined
+const WRONG_PASSWORD = 400
 
-export async function login(_prev: LoginResult, formData: FormData): Promise<LoginResult> {
-  const kind: SessionKind = formData.get("kind") === "staff" ? "staff" : "student"
-  const next = String(formData.get("next") ?? "")
+export type FormResult = { error: string } | { done: true } | undefined
 
+const kindOf = (value: FormDataEntryValue | null): SessionKind =>
+  value === "staff" ? "staff" : "student"
+
+const text = (formData: FormData, name: string): string => String(formData.get(name) ?? "").trim()
+
+const safeNext = (next: string, kind: SessionKind): string =>
+  next.startsWith(kind === "staff" ? "/staff" : "/portal") && !next.startsWith("//")
+    ? next
+    : homePath(kind)
+
+export async function storeTokens(pair: TokenPair): Promise<void> {
   const store = await cookies()
-  store.set(SESSION_COOKIE, encodeSession(BYPASS_SESSION[kind]), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 8,
-  })
+  store.set(ACCESS_COOKIE, pair.accessToken, tokenCookieOptions)
+  store.set(REFRESH_COOKIE, pair.refreshToken, tokenCookieOptions)
+}
 
-  const target = next.startsWith("/") && !next.startsWith("//") ? next : homePath(kind)
-  redirect(target)
+export async function login(_previous: FormResult, formData: FormData): Promise<FormResult> {
+  const kind = kindOf(formData.get("kind"))
+  const email = text(formData, "email")
+  const password = String(formData.get("password") ?? "")
+  if (!email || !password) return { error: "Isi email dan kata sandi." }
+
+  try {
+    await storeTokens(
+      await api<TokenPair>(`/auth/login/${kind}`, {
+        method: "POST",
+        body: { email, password },
+        isAnonymous: true,
+      }),
+    )
+  } catch (error) {
+    if (error instanceof ApiError) return { error: error.message }
+    throw error
+  }
+  redirect(safeNext(text(formData, "next"), kind))
 }
 
 export async function logout(): Promise<void> {
   const store = await cookies()
-  const session = decodeSession(store.get(SESSION_COOKIE)?.value)
-  store.delete(SESSION_COOKIE)
-  redirect(session ? loginPath(session.kind) : "/")
+  const kind = readClaims(store.get(ACCESS_COOKIE)?.value)?.kind ?? "student"
+  const refreshToken = store.get(REFRESH_COOKIE)?.value
+  if (refreshToken) {
+    await api("/auth/logout", { method: "POST", body: { refreshToken }, isAnonymous: true }).catch(
+      () => undefined,
+    )
+  }
+  store.delete(ACCESS_COOKIE)
+  store.delete(REFRESH_COOKIE)
+  redirect(loginPath(kind))
+}
+
+export async function requestPasswordReset(
+  _previous: FormResult,
+  formData: FormData,
+): Promise<FormResult> {
+  const email = text(formData, "email")
+  if (!email) return { error: "Isi email akun Anda." }
+  try {
+    await api("/auth/forgot-password", {
+      method: "POST",
+      body: { kind: kindOf(formData.get("kind")), email },
+      isAnonymous: true,
+    })
+  } catch (error) {
+    if (error instanceof ApiError) return { error: error.message }
+    throw error
+  }
+  return { done: true }
+}
+
+export async function resetPassword(
+  _previous: FormResult,
+  formData: FormData,
+): Promise<FormResult> {
+  const password = String(formData.get("password") ?? "")
+  if (password !== String(formData.get("confirmation") ?? "")) {
+    return { error: "Konfirmasi kata sandi tidak sama." }
+  }
+  try {
+    await api("/auth/reset-password", {
+      method: "POST",
+      body: { token: text(formData, "token"), password },
+      isAnonymous: true,
+    })
+  } catch (error) {
+    if (error instanceof ApiError) return { error: error.message }
+    throw error
+  }
+  return { done: true }
+}
+
+export async function changeOwnPassword(form: PasswordForm): Promise<ActionResult> {
+  const result = await actionOf(async () => {
+    await api("/auth/change-password", {
+      method: "POST",
+      body: { currentPassword: form.currentPassword, newPassword: form.newPassword },
+    })
+    return null
+  })
+  if (!result.ok && result.status === WRONG_PASSWORD) {
+    return { ...result, fieldErrors: { currentPassword: result.message } }
+  }
+  return result
 }

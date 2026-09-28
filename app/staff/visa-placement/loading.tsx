@@ -1,6 +1,8 @@
 import { Skeleton } from "@mantine/core"
 
-import { ALUMNI } from "./sample"
+import { TableSkeleton } from "@/src/components/data/TableSkeleton"
+
+const ALUMNI_COLUMNS = 22
 
 export default function Loading() {
   return (
@@ -23,11 +25,7 @@ export default function Loading() {
             <Skeleton height={36} width={170} radius="xl" />
           </div>
         </div>
-        <div className="stack stack-sm">
-          {ALUMNI.map((alumnus) => (
-            <Skeleton key={alumnus.nis} height={56} radius="sm" />
-          ))}
-        </div>
+        <TableSkeleton columns={ALUMNI_COLUMNS} />
       </section>
     </div>
   )

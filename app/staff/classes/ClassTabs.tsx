@@ -2,42 +2,43 @@
 
 import { Tabs } from "@mantine/core"
 
+import { ScrollableTabsList } from "@/src/components/ui/ScrollableTabsList"
+import { useUrlParam } from "@/src/lib/use-url-param"
+
 import { AcademicCalendar } from "./AcademicCalendar"
 import { ClassMembers } from "./ClassMembers"
 import { KkmStandardsTab } from "./KkmStandardsTab"
 import { MasterClassTable } from "./MasterClassTable"
+import { PeriodsTab } from "./PeriodsTab"
 
-const tabsFor = (canEditKkm: boolean) =>
+const tabsFor = (canEdit: boolean) =>
   [
-    { value: "master", label: "Master Kelas", panel: <MasterClassTable /> },
-    { value: "members", label: "Anggota Kelas", panel: <ClassMembers /> },
+    { value: "master", label: "Master Kelas", panel: <MasterClassTable canEdit={canEdit} /> },
+    { value: "members", label: "Anggota Kelas", panel: <ClassMembers canEdit={canEdit} /> },
     { value: "calendar", label: "Kalender Akademik", panel: <AcademicCalendar /> },
-    { value: "kkm", label: "Standar KKM", panel: <KkmStandardsTab readOnly={!canEditKkm} /> },
+    { value: "kkm", label: "Standar KKM", panel: <KkmStandardsTab readOnly={!canEdit} /> },
+    { value: "periods", label: "Periode Akademik", panel: <PeriodsTab canEdit={canEdit} /> },
   ] as const
 
-export function ClassTabs({
-  initialTab,
-  canEditKkm,
-}: {
-  initialTab?: string
-  canEditKkm: boolean
-}) {
-  const TABS = tabsFor(canEditKkm)
-  const initial = TABS.find((tab) => tab.value === initialTab) ?? TABS[0]
+export function ClassTabs({ canEdit }: { canEdit: boolean }) {
+  const tabs = tabsFor(canEdit)
+  const [tab, setTab] = useUrlParam("tab", tabs[0].value, (value) =>
+    tabs.some((candidate) => candidate.value === value),
+  )
 
   return (
-    <Tabs defaultValue={initial.value} keepMounted={false}>
-      <Tabs.List mb="lg">
-        {TABS.map((tab) => (
-          <Tabs.Tab key={tab.value} value={tab.value}>
-            {tab.label}
+    <Tabs value={tab} onChange={(value) => value && setTab(value)} keepMounted={false}>
+      <ScrollableTabsList>
+        {tabs.map(({ value, label }) => (
+          <Tabs.Tab key={value} value={value}>
+            {label}
           </Tabs.Tab>
         ))}
-      </Tabs.List>
+      </ScrollableTabsList>
 
-      {TABS.map((tab) => (
-        <Tabs.Panel key={tab.value} value={tab.value}>
-          {tab.panel}
+      {tabs.map(({ value, panel }) => (
+        <Tabs.Panel key={value} value={value}>
+          {panel}
         </Tabs.Panel>
       ))}
     </Tabs>

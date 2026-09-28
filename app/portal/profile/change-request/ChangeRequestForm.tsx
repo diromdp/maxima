@@ -1,156 +1,247 @@
 "use client"
 
-import { useState } from "react"
-import { FileInput, Stack, Textarea, TextInput } from "@mantine/core"
-import { notify } from "@/src/lib/notify"
+import { FileInput, Select, Skeleton, Stack, Textarea } from "@mantine/core"
+import { schemaResolver, useForm } from "@mantine/form"
 import { Upload04Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
 
-import { formatFileSize } from "@/src/lib/format"
+import { QueryError } from "@/src/components/data/QueryError"
+import { IdentityFieldInput } from "@/src/components/ui/IdentityFieldInput"
+import { Notice } from "@/src/components/ui/Notice"
+import { presignProfileEvidence, requestProfileChange } from "@/src/entities/portal/actions"
+import { portalProfileQuery } from "@/src/entities/portal/queries"
+import {
+  changeRequestFormSchema,
+  identitySpecOf,
+  PROFILE_FIELDS,
+  type PortalProfile,
+  type ProfileField,
+} from "@/src/entities/portal/schema"
+import { type ActionResult, failureOf } from "@/src/lib/api/errors"
+import { useRead } from "@/src/lib/api/use-read"
+import { formatDateLong, formatFileSize } from "@/src/lib/format"
+import {
+  isUploadable,
+  putToStorage,
+  UPLOAD_ACCEPT,
+  UPLOAD_FAILED,
+  UPLOAD_RULE,
+} from "@/src/lib/upload"
+import { useActionForm } from "@/src/lib/use-action-form"
 
-import { CHANGEABLE_SECTIONS, type ProfileField } from "../profile"
+import { NOT_CHANGEABLE_HERE, ON_LEAVE_BLOCK } from "../profile"
 
-const UPLOAD_MAX_BYTES = 5 * 1024 * 1024
-const UPLOAD_RULE = `PDF, PNG, atau JPG. Maksimal ${formatFileSize(UPLOAD_MAX_BYTES)}.`
+const EVIDENCE_FIELD = "evidence"
 
-const INITIAL_VALUES: Readonly<Record<string, string>> = Object.fromEntries(
-  CHANGEABLE_SECTIONS.flatMap((section) => section.fields.map((field) => [field.key, field.value])),
-)
+const STEPS = [
+  "Pilih data yang ingin diubah, lalu tulis nilai barunya dan alasannya.",
+  "Cabang memeriksa pengajuan Anda. Lampirkan berkas pendukung bila perubahannya menyangkut dokumen resmi, misalnya KTP, akta, atau ijazah.",
+  "Kalau disetujui, Profil ikut berubah dan tercatat di log aktivitas. Kalau ditolak, alasannya tampil di Profil.",
+] as const
 
-function isChanged(field: ProfileField, values: Readonly<Record<string, string>>): boolean {
-  return (values[field.key] ?? "").trim() !== field.value
+type ChangeRequestValues = {
+  field: ProfileField | null
+  proposedValue: string | null
+  reason: string
 }
 
-function changedDescription(field: ProfileField): string {
-  return field.needsDocument
-    ? `Diubah. Diperiksa ${field.reviewer}, butuh berkas pendukung.`
-    : `Diubah. Diperiksa ${field.reviewer}.`
+function currentValueOf(profile: PortalProfile, field: ProfileField): string {
+  const value = profile.identity[field]
+  if (!value) return "Belum diisi"
+  return identitySpecOf(field).input === "date" ? formatDateLong(value) : value
 }
 
-export function ChangeRequestForm() {
-  const [values, setValues] = useState<Readonly<Record<string, string>>>(INITIAL_VALUES)
-  const [reason, setReason] = useState("")
-  const [document, setDocument] = useState<File | null>(null)
+async function uploadEvidence(file: File): Promise<ActionResult<string>> {
+  if (!isUploadable(file)) return failureOf(UPLOAD_RULE, EVIDENCE_FIELD)
+  const presigned = await presignProfileEvidence({ mimeType: file.type, sizeBytes: file.size })
+  if (!presigned.ok) return presigned
+  if (!(await putToStorage(presigned.data, file))) return failureOf(UPLOAD_FAILED, EVIDENCE_FIELD)
+  return { ok: true, data: presigned.data.evidenceId }
+}
 
-  const changed = CHANGEABLE_SECTIONS.flatMap((section) =>
-    section.fields.filter((field) => isChanged(field, values)),
+function RequestForm({ profile, isOnLeave }: { profile: PortalProfile; isOnLeave: boolean }) {
+  const router = useRouter()
+  const [evidence, setEvidence] = useState<File | null>(null)
+  const canAttach = profile.nis !== null
+  const pendingFields = new Set(
+    profile.changeRequests
+      .filter((request) => request.status === "Menunggu")
+      .map((request) => request.field),
   )
-  const needsDocument = changed.some((field) => field.needsDocument)
-  const reviewers = [...new Set(changed.map((field) => field.reviewer))]
 
-  const missing = [
-    changed.length === 0 ? "ubah minimal satu data" : null,
-    changed.some((field) => !(values[field.key] ?? "").trim()) ? "isi data yang dikosongkan" : null,
-    reason.trim() ? null : "tulis alasannya",
-    needsDocument && !document ? "unggah berkas pendukung" : null,
-  ].filter((item): item is string => item !== null)
+  const form = useForm<ChangeRequestValues>({
+    initialValues: { field: null, proposedValue: null, reason: "" },
+    validate: schemaResolver(changeRequestFormSchema, { sync: true }),
+  })
 
-  function setValue(key: string, value: string) {
-    setValues((current) => ({ ...current, [key]: value }))
-  }
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: async (values): Promise<ActionResult<PortalProfile>> => {
+      const request = changeRequestFormSchema.parse(values)
+      if (!evidence) return requestProfileChange(request, null)
+      const uploaded = await uploadEvidence(evidence)
+      if (!uploaded.ok) return uploaded
+      return requestProfileChange(request, uploaded.data)
+    },
+    successMessage: "Pengajuan perubahan terkirim. Cabang memeriksanya, hasilnya tampil di Profil.",
+    invalidates: [["portal-profile"]],
+    onSuccess: () => router.push("/portal/profile"),
+  })
 
-  function reset() {
-    setValues(INITIAL_VALUES)
-    setReason("")
-    setDocument(null)
-  }
+  const { field } = form.values
+  const fieldOptions = PROFILE_FIELDS.map((key) => ({
+    value: key,
+    label: pendingFields.has(key)
+      ? `${identitySpecOf(key).label} (menunggu keputusan)`
+      : identitySpecOf(key).label,
+    disabled: pendingFields.has(key),
+  }))
 
   return (
-    <form
-      className="stack stack-lg"
-      onSubmit={(event) => {
-        event.preventDefault()
-        notify.success(
-          `Pengajuan ${changed.length} perubahan terkirim. ${reviewers.join(" dan ")} memeriksanya, hasilnya tampil di Profil.`,
-        )
-        reset()
-      }}
-    >
-      {CHANGEABLE_SECTIONS.map((section) => (
-        <section key={section.id} className="card stack" aria-labelledby={`${section.id}-heading`}>
-          <div className="section-head">
-            <h2 className="h5" id={`${section.id}-heading`}>
-              {section.title}
-            </h2>
-          </div>
+    <form className="stack stack-lg" onSubmit={submit} noValidate>
+      {isOnLeave && <Notice tone="warning">{ON_LEAVE_BLOCK}</Notice>}
+      {formError && <Notice tone="danger">{formError}</Notice>}
 
-          <div className="grid-2">
-            {section.fields.map((field) => {
-              const changedNow = isChanged(field, values)
-              return (
-                <TextInput
-                  key={field.key}
-                  label={field.label}
-                  placeholder={field.value}
-                  description={changedNow ? changedDescription(field) : undefined}
-                  value={values[field.key] ?? ""}
-                  onChange={(event) => setValue(field.key, event.currentTarget.value)}
-                  styles={
-                    changedNow ? { description: { color: "var(--color-warning)" } } : undefined
-                  }
-                />
-              )
-            })}
-          </div>
-        </section>
-      ))}
-
-      <section className="card stack" aria-labelledby="reason-heading">
-        <div className="stack" style={{ gap: 2 }}>
-          <h2 className="h5" id="reason-heading">
-            Alasan dan Berkas
+      <section className="card stack" aria-labelledby="change-heading">
+        <div className="section-head">
+          <h2 className="h5" id="change-heading">
+            Data yang Diubah
           </h2>
-          <span className="caption text-muted">
-            Satu alasan untuk seluruh perubahan di atas. Berkas wajib kalau ada data resmi yang
-            diubah: nama, NIK, tanggal lahir, jenis kelamin, atau pendidikan.
-          </span>
+          <span className="caption text-muted">satu data per pengajuan</span>
         </div>
 
         <Stack gap="md">
+          <Select
+            label="Kolom"
+            placeholder="Pilih data"
+            data={fieldOptions}
+            searchable
+            withAsterisk
+            {...form.getInputProps("field")}
+            onChange={(value) =>
+              form.setValues({ field: value as ProfileField | null, proposedValue: null })
+            }
+          />
+
+          {field && (
+            <>
+              <div className="row-soft">
+                <span className="spec-name">Tercatat sekarang</span>
+                <span className="body-sm" style={{ fontWeight: 600 }}>
+                  {currentValueOf(profile, field)}
+                </span>
+              </div>
+              <IdentityFieldInput
+                key={field}
+                field={identitySpecOf(field)}
+                label="Nilai Baru"
+                isRequired
+                inputProps={form.getInputProps("proposedValue")}
+              />
+            </>
+          )}
+
           <Textarea
-            label="Alasan perubahan"
+            label="Alasan"
             description="Singkat saja. Contoh: salah ketik saat mendaftar, pindah alamat."
             placeholder="Tulis alasannya"
             autosize
             minRows={3}
-            value={reason}
-            onChange={(event) => setReason(event.currentTarget.value)}
+            withAsterisk
+            {...form.getInputProps("reason")}
           />
 
-          <FileInput
-            label="Berkas pendukung"
-            description={
-              document
-                ? `${document.name} · ${formatFileSize(document.size)}`
-                : `${needsDocument ? "Wajib untuk perubahan ini, misalnya KTP, akta, atau ijazah." : "Opsional untuk perubahan ini."} ${UPLOAD_RULE}`
-            }
-            placeholder="Pilih berkas"
-            leftSection={<HugeiconsIcon icon={Upload04Icon} size={16} strokeWidth={1.5} />}
-            clearable
-            accept="application/pdf,image/png,image/jpeg"
-            value={document}
-            onChange={setDocument}
-          />
+          {canAttach ? (
+            <FileInput
+              label="Berkas Pendukung"
+              description={
+                evidence
+                  ? `${evidence.name} · ${formatFileSize(evidence.size)}`
+                  : `Boleh kosong. Lampirkan bila perubahannya menyangkut dokumen resmi. ${UPLOAD_RULE}`
+              }
+              placeholder="Pilih berkas"
+              leftSection={<HugeiconsIcon icon={Upload04Icon} size={16} strokeWidth={1.5} />}
+              clearable
+              accept={UPLOAD_ACCEPT}
+              value={evidence}
+              onChange={setEvidence}
+              error={form.errors[EVIDENCE_FIELD]}
+            />
+          ) : (
+            <span className="caption text-muted">
+              Berkas pendukung dapat dilampirkan setelah NIS terbit.
+            </span>
+          )}
         </Stack>
       </section>
 
-      <div className="row row-between row-wrap" style={{ gap: 12 }}>
-        <span className="caption text-muted" aria-live="polite">
-          {missing.length > 0
-            ? `Sebelum mengirim: ${missing.join(", ")}.`
-            : `${changed.length} data diubah: ${changed.map((field) => field.label.toLowerCase()).join(", ")}. Diperiksa ${reviewers.join(" dan ")}.`}
-        </span>
-        <div className="row" style={{ gap: 8 }}>
-          {changed.length > 0 && (
-            <button type="button" className="btn btn-secondary" onClick={reset}>
-              Batalkan Perubahan
-            </button>
-          )}
-          <button type="submit" className="btn btn-primary" disabled={missing.length > 0}>
-            Kirim Pengajuan
-          </button>
-        </div>
+      <div className="row justify-end">
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={isPending || isOnLeave}
+          title={isOnLeave ? ON_LEAVE_BLOCK : undefined}
+        >
+          {isPending ? "Mengirim..." : "Kirim Pengajuan"}
+        </button>
       </div>
     </form>
+  )
+}
+
+function Guide({ consultant }: { consultant: string | null }) {
+  return (
+    <div className="stack stack-lg" style={{ alignSelf: "start" }}>
+      <section className="card stack">
+        <div className="section-head">
+          <h2 className="h5">Cara kerjanya</h2>
+        </div>
+        <ol className="stack" style={{ margin: 0, paddingInlineStart: 20 }}>
+          {STEPS.map((step) => (
+            <li key={step} className="body-sm">
+              {step}
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="card stack">
+        <div className="section-head">
+          <h2 className="h5">Tidak bisa diajukan dari sini</h2>
+        </div>
+        <ul className="stack stack-sm" style={{ margin: 0, paddingInlineStart: 20 }}>
+          {NOT_CHANGEABLE_HERE.map((item) => (
+            <li key={item} className="body-sm">
+              {item}
+            </li>
+          ))}
+        </ul>
+        <p className="body-sm text-muted">
+          Ketiganya milik Finance dan Marketing. Bicarakan dengan PIC Anda
+          {consultant ? `, ${consultant}` : ""}.
+        </p>
+      </section>
+    </div>
+  )
+}
+
+export function ChangeRequestForm({ isOnLeave }: { isOnLeave: boolean }) {
+  const profile = useRead(portalProfileQuery())
+
+  if (profile.isError) {
+    return <QueryError message={profile.error.message} onRetry={() => void profile.refetch()} />
+  }
+
+  return (
+    <div className="grid-main-aside">
+      {profile.isPending ? (
+        <Skeleton height={420} radius="md" aria-hidden />
+      ) : (
+        <RequestForm profile={profile.data} isOnLeave={isOnLeave} />
+      )}
+      <Guide consultant={profile.data?.companions.pic ?? null} />
+    </div>
   )
 }

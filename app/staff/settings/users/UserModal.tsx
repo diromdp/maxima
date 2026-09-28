@@ -9,104 +9,154 @@ import {
   Select,
   TextInput,
 } from "@mantine/core"
-import { notify } from "@/src/lib/notify"
+import { schemaResolver, useForm } from "@mantine/form"
 
-import { BRANCHES, ROLE_NAMES, type StaffUser } from "./sample"
+import { Notice } from "@/src/components/ui/Notice"
+import { saveUser } from "@/src/entities/user/actions"
+import {
+  ACCESS_GRANT,
+  type BranchRow,
+  type RoleRow,
+  type UserForm,
+  userFormSchema,
+  type UserRow,
+} from "@/src/entities/user/schema"
+import { useActionForm } from "@/src/lib/use-action-form"
+
+const ALL_BRANCHES = "all"
+const validateUser = schemaResolver(userFormSchema, { sync: true })
 
 const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
+const ROLE_LOCKED =
+  "Mengganti peran butuh kewenangan Memberi hak akses. Minta super admin atau General Admin."
 
-/**
- * Satu modal untuk Tambah dan Edit pengguna: tanpa `initial` = tambah, dengan
- * `initial` = ubah, field terisi dari baris. `key` di pemanggil mengosongkan
- * form saat baris yang diubah berganti.
- */
+const formOf = (user: UserRow | undefined): UserForm => ({
+  name: user?.name ?? "",
+  email: user?.email ?? "",
+  password: "",
+  roleId: user?.role?.id ?? "",
+  isActive: user ? user.status === "Aktif" : true,
+  branchIds: user?.branches.map((branch) => branch.id) ?? [],
+})
+
 export function UserModal({
-  opened,
-  onClose,
   initial,
+  roles,
+  branches,
+  canGrant,
+  isSuperAdmin,
+  onClose,
 }: {
-  opened: boolean
+  initial?: UserRow
+  roles: readonly RoleRow[]
+  branches: readonly BranchRow[]
+  canGrant: boolean
+  isSuperAdmin: boolean
   onClose: () => void
-  initial?: StaffUser
 }) {
+  const initialValues = formOf(initial)
+  const form = useForm<UserForm>({
+    initialValues,
+    validate: (values) => ({
+      ...validateUser(values),
+      ...(initial || values.password ? {} : { password: "Isi kata sandi awal pengguna." }),
+    }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) => saveUser(initial?.id ?? null, values, initial ? initialValues : null),
+    successMessage: initial ? `Perubahan ${initial.name} disimpan.` : "Pengguna baru disimpan.",
+    invalidates: [["users"], ["roles"]],
+    onSuccess: onClose,
+  })
+
+  const roleOptions = roles
+    .filter(
+      (role) =>
+        (role.status === "Aktif" || role.id === initial?.role?.id) &&
+        (isSuperAdmin || !role.capabilities.includes(ACCESS_GRANT)),
+    )
+    .map((role) => ({ value: role.id, label: role.name }))
+
   return (
     <Modal
-      opened={opened}
+      opened
       onClose={onClose}
       title={initial ? `Ubah Pengguna ${initial.name}` : "Tambah Pengguna"}
       size="lg"
       styles={TITLE_STYLE}
     >
-      <form
-        className="stack stack-lg"
-        onSubmit={(e) => {
-          e.preventDefault()
-          notify.success(
-            initial ? `Perubahan ${initial.name} disimpan.` : "Pengguna baru disimpan.",
-          )
-          onClose()
-        }}
-        onReset={onClose}
-      >
+      <form className="stack stack-lg" onSubmit={submit}>
+        {formError && <Notice tone="danger">{formError}</Notice>}
+
         <div className="grid-2">
           <TextInput
-            name="name"
             label="Nama"
             placeholder="Nama depan atau panggilan"
-            defaultValue={initial?.name}
-            required
+            withAsterisk
+            {...form.getInputProps("name")}
           />
           <TextInput
-            name="email"
             type="email"
             label="Email"
-            placeholder="nama@maxima.id"
-            defaultValue={initial?.email}
-            required
+            placeholder="nama@maxima.co.id"
+            withAsterisk
+            {...form.getInputProps("email")}
           />
         </div>
 
-        <div className="grid-2">
-          <PasswordInput
-            name="password"
-            label={initial ? "Password baru" : "Password"}
-            placeholder={initial ? "Kosongkan bila tidak diganti" : "Minimal 8 karakter"}
-            autoComplete="new-password"
-            required={!initial}
-          />
-          <Select
-            name="role"
-            label="Peran"
-            placeholder="Pilih peran"
-            data={[...ROLE_NAMES]}
-            defaultValue={initial?.role}
-            required
-          />
-        </div>
+        <PasswordInput
+          label={initial ? "Kata Sandi Baru" : "Kata Sandi"}
+          placeholder={initial ? "Kosongkan bila tidak diganti" : "Minimal 8 karakter"}
+          description={
+            initial
+              ? "Pengguna menerima surel pemberitahuan bila kata sandinya diganti."
+              : "Sampaikan kata sandi ini ke pengguna; ia dapat menggantinya sendiri nanti."
+          }
+          autoComplete="new-password"
+          withAsterisk={!initial}
+          {...form.getInputProps("password")}
+        />
+
+        <Select
+          label="Peran"
+          placeholder="Pilih peran"
+          data={roleOptions}
+          disabled={!canGrant}
+          description={canGrant ? undefined : ROLE_LOCKED}
+          withAsterisk
+          {...form.getInputProps("roleId")}
+        />
 
         <MultiSelect
-          name="branches"
           label="Cakupan cabang"
-          placeholder={initial?.branches ? undefined : "Semua cabang"}
-          description="Kosongkan bila pengguna boleh melihat seluruh cabang."
-          data={[...BRANCHES]}
-          defaultValue={initial?.branches ? [...initial.branches] : []}
-          clearable
+          description="Pilih Semua cabang bila pengguna boleh melihat seluruh cabang, termasuk cabang yang ditambah nanti."
+          data={[
+            { value: ALL_BRANCHES, label: "Semua cabang" },
+            ...branches.map((branch) => ({ value: branch.id, label: branch.name })),
+          ]}
+          value={form.values.branchIds.length === 0 ? [ALL_BRANCHES] : form.values.branchIds}
+          onChange={(next) =>
+            form.setFieldValue(
+              "branchIds",
+              next.at(-1) === ALL_BRANCHES ? [] : next.filter((value) => value !== ALL_BRANCHES),
+            )
+          }
+          error={form.errors.branchIds}
         />
 
         <Checkbox
-          name="active"
           label="Aktif"
           description="Pengguna nonaktif tidak bisa masuk, datanya tetap tersimpan."
-          defaultChecked={initial ? initial.status === "Aktif" : true}
+          {...form.getInputProps("isActive", { type: "checkbox" })}
         />
 
         <Group justify="flex-end">
-          <button type="reset" className="btn btn-secondary">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
             Batal
           </button>
-          <button type="submit" className="btn btn-primary">
-            Simpan Pengguna
+          <button type="submit" className="btn btn-primary" disabled={isPending}>
+            {isPending ? "Menyimpan..." : "Simpan Pengguna"}
           </button>
         </Group>
       </form>

@@ -2,45 +2,39 @@
 
 import { Tabs } from "@mantine/core"
 
+import { ScrollableTabsList } from "@/src/components/ui/ScrollableTabsList"
+import { useUrlParam } from "@/src/lib/use-url-param"
+
 import { CertificatesTab } from "./CertificatesTab"
 import { RecommendationsTab } from "./RecommendationsTab"
 import { SchedulesTab } from "./SchedulesTab"
 
-const TAB_VALUES = ["certificates", "recommendations", "schedules"] as const
-type TabValue = (typeof TAB_VALUES)[number]
+const TABS = [
+  { value: "certificates", label: "Sertifikat" },
+  { value: "recommendations", label: "Rekomendasi Ujian" },
+  { value: "schedules", label: "Jadwal & Pendaftaran" },
+] as const
 
-const TAB_LABELS: Readonly<Record<TabValue, string>> = {
-  certificates: "Sertifikat",
-  recommendations: "Rekomendasi Ujian",
-  schedules: "Jadwal & Pendaftaran",
-}
-
-export function ExamTabs({
-  initialTab,
-  readOnly,
-  viewerName,
-}: {
-  initialTab?: string
-  readOnly: boolean
-  viewerName: string
-}) {
-  const initial = TAB_VALUES.find((value) => value === initialTab) ?? TAB_VALUES[0]
+export function ExamTabs({ readOnly, viewerName }: { readOnly: boolean; viewerName: string }) {
+  const [tab, setTab] = useUrlParam("tab", TABS[0].value, (value) =>
+    TABS.some((candidate) => candidate.value === value),
+  )
 
   return (
-    <Tabs defaultValue={initial} keepMounted={false}>
-      <Tabs.List mb="lg">
-        {TAB_VALUES.map((value) => (
+    <Tabs value={tab} onChange={(value) => value && setTab(value)}>
+      <ScrollableTabsList>
+        {TABS.map(({ value, label }) => (
           <Tabs.Tab key={value} value={value}>
-            {TAB_LABELS[value]}
+            {label}
           </Tabs.Tab>
         ))}
-      </Tabs.List>
+      </ScrollableTabsList>
 
       <Tabs.Panel value="certificates">
         <CertificatesTab readOnly={readOnly} />
       </Tabs.Panel>
       <Tabs.Panel value="recommendations">
-        <RecommendationsTab readOnly={readOnly} recommenderName={viewerName} />
+        <RecommendationsTab readOnly={readOnly} viewerName={viewerName} />
       </Tabs.Panel>
       <Tabs.Panel value="schedules">
         <SchedulesTab readOnly={readOnly} />

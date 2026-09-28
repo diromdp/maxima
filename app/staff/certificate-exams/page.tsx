@@ -1,16 +1,23 @@
 import { PageHeader } from "@/src/components/layout/PageHeader"
+import { certificatesQuery } from "@/src/entities/certificate/queries"
+import { CERTIFICATE_FILTERS, certificateFiltersOf } from "@/src/entities/certificate/schema"
+import { masterItemsQuery } from "@/src/entities/master-data/queries"
+import { Prefetched } from "@/src/lib/api/Prefetched"
 import { canEdit } from "@/src/lib/auth/permissions"
 import { requirePermission } from "@/src/lib/auth/session"
+import { listParamsOf, searchParamsSource } from "@/src/lib/list-query"
 
 import { ExamTabs } from "./ExamTabs"
 
 export default async function CertificateExamsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const session = await requirePermission("certificate-exams")
-  const { tab } = await searchParams
+  const filters = certificateFiltersOf(
+    listParamsOf(searchParamsSource(await searchParams), CERTIFICATE_FILTERS),
+  )
 
   return (
     <div className="stack stack-lg">
@@ -19,11 +26,12 @@ export default async function CertificateExamsPage({
         subtitle="Ujian sertifikasi dari rekomendasi sampai nilai terverifikasi."
       />
 
-      <ExamTabs
-        initialTab={tab}
-        readOnly={!canEdit(session.role, "certificate-exams")}
-        viewerName={session.name}
-      />
+      <Prefetched reads={[certificatesQuery(filters), masterItemsQuery()]}>
+        <ExamTabs
+          readOnly={!canEdit(session.permissions, "certificate-exams")}
+          viewerName={session.name}
+        />
+      </Prefetched>
     </div>
   )
 }

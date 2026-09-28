@@ -128,6 +128,14 @@
     }
   }
 
+  // Tautan sebaris yang berupa <button> (Unduh, Buka bukti) tanpa kotak bawaan peramban.
+  button.link {
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+
   .label {
     @extend %text-base;
     font-size: 12px;

@@ -1,13 +1,22 @@
 "use client"
 
-import { Search01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Select, TextInput } from "@mantine/core"
+import { Tooltip } from "@mantine/core"
+import { modals } from "@mantine/modals"
+import { useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
-import { DataTable, type DataColumn } from "@/src/components/data/DataTable"
+import { ListFilter } from "@/src/components/data/ListFilter"
+import { ListSearch } from "@/src/components/data/ListSearch"
+import { QueryError } from "@/src/components/data/QueryError"
+import { ServerDataTable } from "@/src/components/data/ServerDataTable"
+import type { DataColumn } from "@/src/components/data/TableFrame"
+import { deleteUser } from "@/src/entities/user/actions"
+import { branchesQuery, rolesQuery, USER_FILTERS, usersQuery } from "@/src/entities/user/queries"
+import { ACCESS_GRANT, type UserRow, type UserStatus } from "@/src/entities/user/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { notify } from "@/src/lib/notify"
+import { useListParams } from "@/src/lib/use-list-params"
 
-import { branchLabel, BRANCHES, ROLE_NAMES, type StaffUser, USERS, type UserStatus } from "./sample"
 import { UserModal } from "./UserModal"
 
 const BADGE: Readonly<Record<UserStatus, string>> = {
@@ -15,61 +24,114 @@ const BADGE: Readonly<Record<UserStatus, string>> = {
   Nonaktif: "badge-tindakan",
 }
 
-const ALL_BRANCHES = "Semua cabang"
+const GRANT_NEEDED =
+  "Menambah pengguna menugaskan peran, jadi butuh kewenangan Memberi hak akses dari super admin."
+const KEY_HOLDER_LOCKED = "Pemegang Memberi hak akses hanya dapat diubah super admin."
 
-const matches = (u: StaffUser, q: string) =>
-  q === "" || `${u.name} ${u.email}`.toLowerCase().includes(q.toLowerCase())
+export function UsersTable({
+  canEdit,
+  canGrant,
+  isSuperAdmin,
+  selfId,
+}: {
+  canEdit: boolean
+  canGrant: boolean
+  isSuperAdmin: boolean
+  selfId: string
+}) {
+  const queryClient = useQueryClient()
+  const { params } = useListParams(USER_FILTERS)
+  const users = useRead(usersQuery(params))
+  const roles = useRead(rolesQuery())
+  const branches = useRead(branchesQuery())
+  const [editing, setEditing] = useState<UserRow | null>(null)
+  const [isAdding, setIsAdding] = useState(false)
 
-export function UsersTable() {
-  const [query, setQuery] = useState("")
-  const [role, setRole] = useState<string | null>(null)
-  const [branch, setBranch] = useState<string | null>(null)
-  const [editing, setEditing] = useState<StaffUser | null>(null)
-  const [adding, setAdding] = useState(false)
+  const confirmDelete = (user: UserRow) =>
+    modals.openConfirmModal({
+      title: `Hapus pengguna ${user.name}?`,
+      children: (
+        <p className="body-sm">
+          Hanya pengguna yang belum tercatat di data mana pun yang dapat dihapus. Yang sudah pernah
+          bekerja di sistem cukup dinonaktifkan lewat Edit.
+        </p>
+      ),
+      labels: { confirm: "Hapus Pengguna", cancel: "Batal" },
+      confirmProps: { color: "red" },
+      onConfirm: async () => {
+        const result = await deleteUser(user.id)
+        if (!result.ok) return notify.error(result.message)
+        notify.success(`Pengguna ${user.name} dihapus.`)
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["users"] }),
+          queryClient.invalidateQueries({ queryKey: ["roles"] }),
+        ])
+      },
+    })
 
-  const rows = USERS.filter(
-    (u) =>
-      matches(u, query) &&
-      (role === null || u.role === role) &&
-      (branch === null ||
-        (branch === ALL_BRANCHES ? u.branches === null : u.branches?.includes(branch))),
+  const keyHolderRoles = new Set(
+    (roles.data?.data ?? [])
+      .filter((role) => role.capabilities.includes(ACCESS_GRANT))
+      .map((role) => role.id),
   )
 
-  const columns: readonly DataColumn<StaffUser>[] = [
-    {
-      key: "name",
-      header: "Nama",
-      sort: (u) => u.name,
-      cell: (u) => <span className="text-ink">{u.name}</span>,
-    },
-    { key: "email", header: "Email", sort: (u) => u.email, cell: (u) => u.email },
+  const columns: readonly DataColumn<UserRow>[] = [
+    { key: "name", header: "Nama", cell: (u) => <span className="text-ink">{u.name}</span> },
+    { key: "email", header: "Email", cell: (u) => u.email },
     {
       key: "role",
       header: "Peran",
-      sort: (u) => u.role,
-      cell: (u) => <span className="badge">{u.role}</span>,
+      cell: (u) => (
+        <span className="badge">{u.isSuperAdmin ? "Super Admin" : (u.role?.name ?? "-")}</span>
+      ),
     },
     {
       key: "branch",
       header: "Cabang",
-      sort: (u) => branchLabel(u.branches),
-      cell: (u) => branchLabel(u.branches),
+      cell: (u) =>
+        u.branches.length === 0 ? "Semua cabang" : u.branches.map((b) => b.name).join(", "),
     },
     {
       key: "status",
       header: "Status",
-      sort: (u) => u.status,
       cell: (u) => <span className={`badge ${BADGE[u.status]}`}>{u.status}</span>,
     },
-    {
-      key: "aksi",
-      header: "Aksi",
-      cell: (u) => (
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(u)}>
-          Edit
-        </button>
-      ),
-    },
+    ...(canEdit
+      ? [
+          {
+            key: "aksi",
+            header: "Aksi",
+            cell: (u: UserRow) => {
+              if (u.isSuperAdmin) return null
+              const isLocked = !isSuperAdmin && u.role !== null && keyHolderRoles.has(u.role.id)
+              return (
+                <Tooltip label={KEY_HOLDER_LOCKED} disabled={!isLocked} multiline w={240}>
+                  <div className="row" style={{ gap: 4 }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={isLocked}
+                      onClick={() => setEditing(u)}
+                    >
+                      Edit
+                    </button>
+                    {u.id !== selfId && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={isLocked}
+                        onClick={() => confirmDelete(u)}
+                      >
+                        Hapus
+                      </button>
+                    )}
+                  </div>
+                </Tooltip>
+              )
+            },
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -77,54 +139,74 @@ export function UsersTable() {
       <div className="row row-between row-wrap">
         <div className="row">
           <h2 className="h5">Pengguna</h2>
-          <span className="pill tabular">{rows.length} pengguna</span>
+          {users.data && <span className="pill tabular">{users.data.meta.total} pengguna</span>}
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
-          + Tambah Pengguna
-        </button>
+        {canEdit && (
+          <Tooltip label={GRANT_NEEDED} disabled={canGrant} multiline w={260}>
+            <span>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={!canGrant}
+                onClick={() => setIsAdding(true)}
+              >
+                + Tambah Pengguna
+              </button>
+            </span>
+          </Tooltip>
+        )}
       </div>
 
-      <div className="grid-3">
-        <TextInput
-          aria-label="Cari pengguna"
-          placeholder="Cari nama atau email"
-          leftSection={<HugeiconsIcon icon={Search01Icon} size={16} strokeWidth={1.5} />}
-          value={query}
-          onChange={(e) => setQuery(e.currentTarget.value)}
+      <div className="row row-wrap" style={{ gap: 8 }}>
+        <ListSearch label="Cari nama atau email" />
+        <ListFilter
+          name="role"
+          label="peran"
+          options={(roles.data?.data ?? []).map((role) => ({ value: role.id, label: role.name }))}
         />
-        <Select
-          aria-label="Saring peran"
-          placeholder="Semua peran"
-          data={[...ROLE_NAMES]}
-          value={role}
-          onChange={setRole}
-          clearable
-        />
-        <Select
-          aria-label="Saring cabang"
-          placeholder="Semua cabang"
-          data={[ALL_BRANCHES, ...BRANCHES]}
-          value={branch}
-          onChange={setBranch}
-          clearable
+        <ListFilter
+          name="branch"
+          label="cabang"
+          options={(branches.data?.data ?? []).map((branch) => ({
+            value: branch.id,
+            label: branch.name,
+          }))}
         />
       </div>
 
-      <DataTable
-        rows={rows}
-        columns={columns}
-        rowKey={(u) => u.id}
-        defaultSort={{ key: "name", dir: "asc" }}
-        emptyText="Tidak ada pengguna yang cocok dengan saringan."
-      />
+      {users.isError ? (
+        <QueryError message={users.error.message} onRetry={() => void users.refetch()} />
+      ) : (
+        <ServerDataTable
+          rows={users.data?.data ?? []}
+          total={users.data?.meta.total ?? 0}
+          isPending={users.isPending}
+          columns={columns}
+          rowKey={(u) => u.id}
+          emptyText="Tidak ada pengguna yang cocok dengan saringan."
+        />
+      )}
 
-      <UserModal opened={adding} onClose={() => setAdding(false)} />
-      <UserModal
-        key={editing?.id ?? "none"}
-        opened={editing !== null}
-        onClose={() => setEditing(null)}
-        initial={editing ?? undefined}
-      />
+      {isAdding && (
+        <UserModal
+          roles={roles.data?.data ?? []}
+          branches={branches.data?.data ?? []}
+          canGrant={canGrant}
+          isSuperAdmin={isSuperAdmin}
+          onClose={() => setIsAdding(false)}
+        />
+      )}
+      {editing && (
+        <UserModal
+          key={editing.id}
+          initial={editing}
+          roles={roles.data?.data ?? []}
+          branches={branches.data?.data ?? []}
+          canGrant={canGrant}
+          isSuperAdmin={isSuperAdmin}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </section>
   )
 }

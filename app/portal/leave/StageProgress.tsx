@@ -1,21 +1,22 @@
-import { CardHeader } from "./CardHeader"
-import { STAGE_BADGE, STAGES, stageStatus, type LeaveState } from "./leave"
+import { type LeaveState, STAGE_TONE, STAGES, stageStatusOf } from "@/src/entities/leave/schema"
 
-export function StageProgress({ state }: { state: LeaveState }) {
+import { CardHeader } from "./CardHeader"
+
+export function StageProgress({ leave }: { leave: { state: LeaveState; stage: number } }) {
   return (
     <section className="card stack">
       <CardHeader title="Kemajuan Pengajuan" note="tujuh langkah" />
 
       <ol className="list-rows" style={{ margin: 0, padding: 0, listStyle: "none" }}>
         {STAGES.map((label, index) => {
-          const status = stageStatus(state, index + 1)
+          const status = stageStatusOf(leave, index + 1)
 
           return (
             <li key={label} className="row row-between">
               <span className="body-sm">
                 {index + 1} · {label}
               </span>
-              <span className={`badge ${STAGE_BADGE[status]}`}>{status}</span>
+              <span className={`badge badge-${STAGE_TONE[status]}`}>{status}</span>
             </li>
           )
         })}

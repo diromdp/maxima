@@ -1,8 +1,6 @@
 import { Skeleton } from "@mantine/core"
 
-import { STUDENTS_BY_CLASS } from "./sample"
-
-const ROWS = STUDENTS_BY_CLASS.berlin
+import { SheetSkeleton } from "./SheetSkeleton"
 
 export default function Loading() {
   return (
@@ -31,14 +29,7 @@ export default function Loading() {
         <Skeleton height={36} width={160} radius="xl" />
       </div>
 
-      <section className="card stack" aria-hidden>
-        <div className="stack stack-sm">
-          {ROWS.map((student) => (
-            <Skeleton key={student.nis} height={44} radius="sm" />
-          ))}
-        </div>
-        <Skeleton height={56} radius="sm" />
-      </section>
+      <SheetSkeleton />
     </div>
   )
 }

@@ -13,7 +13,7 @@ export function AddClassButton() {
         + Tambah Kelas
       </button>
 
-      <ClassFormModal key={`add-${opened}`} opened={opened} onClose={close} />
+      {opened && <ClassFormModal onClose={close} />}
     </>
   )
 }

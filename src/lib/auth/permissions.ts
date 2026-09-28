@@ -36,7 +36,6 @@ export type StaffPage = {
   readonly href: string
   readonly group: MenuGroup | null
   readonly icon: IconSvgElement
-  /** Punya rute dan izin, tapi tidak tampil di sidebar - dibuka dari halaman lain. */
   readonly hidden?: true
 }
 
@@ -50,8 +49,6 @@ export const PAGES = [
     icon: StudentIcon,
   },
   {
-    // Dicabut dari sidebar atas permintaan pemilik repo 19 Sep 2026; alurnya
-    // dibuka lewat tombol "+ Tambah Siswa" di halaman Siswa.
     id: "registrations",
     label: "Pendaftaran Siswa",
     href: "/staff/registrations",
@@ -165,8 +162,6 @@ export const PAGES = [
     group: "Pemberkasan & Penempatan",
     icon: Passport01Icon,
   },
-  // Pengaturan (Admin 20) - empat tab di PRD, dibuka sebagai empat butir menu
-  // atas permintaan pemilik repo 19 Sep 2026. Satu izin `settings` untuk keempatnya.
   {
     id: "settings",
     label: "Pengguna & Hak Akses",
@@ -199,94 +194,19 @@ export const PAGES = [
 
 export type PageId = (typeof PAGES)[number]["id"]
 
-export const ROLE_ACCESS: Readonly<Record<string, Readonly<Partial<Record<PageId, Access>>>>> = {
-  Marketing: {
-    home: "view",
-    students: "view",
-    registrations: "edit",
-    documents: "view",
-    services: "view",
-  },
-  "Kepala Marketing": {
-    home: "view",
-    students: "view",
-    "marketing-performance": "view",
-  },
-  Pengajar: {
-    home: "view",
-    students: "view",
-    classes: "view",
-    "class-sessions": "edit",
-    assessments: "edit",
-    "report-cards": "view",
-  },
-  "Kepala Pengajar": {
-    home: "view",
-    students: "view",
-    leave: "view",
-    classes: "edit",
-    "class-sessions": "view",
-    assessments: "view",
-    "certificate-exams": "edit",
-    "report-cards": "edit",
-    monitoring: "view",
-  },
-  "Staf Finance": {
-    home: "view",
-    students: "view",
-    leave: "edit",
-    payments: "edit",
-    invoices: "view",
-    services: "view",
-  },
-  "Manajer Finance": {
-    home: "view",
-    students: "view",
-    leave: "edit",
-    "packages-promos": "edit",
-    payments: "edit",
-    invoices: "view",
-    reports: "view",
-    services: "view",
-  },
-  Admission: {
-    home: "view",
-    students: "edit",
-    registrations: "edit",
-    leave: "edit",
-    "marketing-performance": "view",
-    classes: "edit",
-    "class-sessions": "edit",
-    assessments: "edit",
-    "certificate-exams": "edit",
-    "report-cards": "edit",
-    monitoring: "view",
-    "packages-promos": "edit",
-    payments: "edit",
-    invoices: "view",
-    reports: "view",
-    documents: "edit",
-    services: "edit",
-    partners: "edit",
-    "visa-placement": "edit",
-    settings: "edit",
-    "settings-master-data": "edit",
-    "settings-print-templates": "edit",
-    "settings-activity-log": "view",
-  },
-}
+export type Permissions = Readonly<Partial<Record<string, Access>>>
 
-export const accessFor = (role: string, page: PageId): Access | undefined =>
-  ROLE_ACCESS[role]?.[page]
+export const canView = (permissions: Permissions, page: PageId): boolean =>
+  permissions[page] !== undefined
 
-export const canView = (role: string, page: PageId): boolean => accessFor(role, page) !== undefined
-
-export const canEdit = (role: string, page: PageId): boolean => accessFor(role, page) === "edit"
+export const canEdit = (permissions: Permissions, page: PageId): boolean =>
+  permissions[page] === "edit"
 
 export type MenuItem = {
   readonly label: string
   readonly href: string
   readonly icon: IconSvgElement
+  readonly lockReason?: string
 }
 
 export type MenuSection = {
@@ -294,11 +214,11 @@ export type MenuSection = {
   readonly items: ReadonlyArray<MenuItem>
 }
 
-export function menuFor(role: string): MenuSection[] {
+export function menuFor(permissions: Permissions): MenuSection[] {
   const sections: MenuSection[] = []
 
   for (const page of PAGES as readonly StaffPage[]) {
-    if (page.hidden || !canView(role, page.id as PageId)) continue
+    if (page.hidden || !canView(permissions, page.id as PageId)) continue
 
     const item = { label: page.label, href: page.href, icon: page.icon }
     const last = sections.at(-1)
@@ -310,5 +230,5 @@ export function menuFor(role: string): MenuSection[] {
     }
   }
 
-  return sections.map((s) => (s.items.length === 1 ? { group: null, items: s.items } : s))
+  return sections
 }

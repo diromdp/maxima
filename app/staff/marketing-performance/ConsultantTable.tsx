@@ -1,70 +1,69 @@
 "use client"
 
 import { DataTable, type DataColumn } from "@/src/components/data/DataTable"
+import type { ConsultantRow } from "@/src/entities/home/schema"
+import { formatPercent } from "@/src/lib/format"
 
-import { type Consultant, CONSULTANTS, ratio } from "./sample"
-
-function Number({ value, tone }: { value: number; tone?: "success" | "danger" }) {
+function Count({ value, tone }: { value: number; tone?: "success" | "danger" }) {
   return <span className={`tabular${tone ? ` text-${tone}` : ""}`}>{value}</span>
 }
 
-const COLUMNS: readonly DataColumn<Consultant>[] = [
+const COLUMNS: readonly DataColumn<ConsultantRow>[] = [
   {
     key: "name",
     header: "Nama PIC",
-    sort: (c) => c.name,
-    cell: (c) => (
-      <div className="stack" style={{ gap: 0 }}>
-        <span className="text-ink" style={{ fontWeight: 600 }}>
-          {c.name}
-        </span>
-        <span className="caption text-muted">Cabang {c.branch}</span>
-      </div>
+    sort: (row) => row.pic.name,
+    cell: (row) => (
+      <span className="text-ink" style={{ fontWeight: 600 }}>
+        {row.pic.name}
+      </span>
     ),
   },
   {
     key: "handled",
     header: "Siswa Dihandle",
     align: "right",
-    sort: (c) => c.handled,
-    cell: (c) => <Number value={c.handled} />,
+    sort: (row) => row.handled,
+    cell: (row) => <Count value={row.handled} />,
   },
   {
-    key: "signed",
+    key: "contracts",
     header: "Kontrak Berhasil",
     align: "right",
-    sort: (c) => c.signed,
-    cell: (c) => (
+    sort: (row) => row.contracts,
+    cell: (row) => (
       <div className="stack" style={{ gap: 0, alignItems: "flex-end" }}>
-        <Number value={c.signed} />
-        <span className="caption text-muted tabular">{ratio(c.signed, c.handled)}% dihandle</span>
+        <Count value={row.contracts} />
+        <span className="caption text-muted tabular">
+          {formatPercent(row.handled === 0 ? 0 : row.contracts / row.handled)} dihandle
+        </span>
       </div>
     ),
   },
   {
-    key: "downPayment",
+    key: "downPayments",
     header: "DP Masuk",
     align: "right",
-    sort: (c) => c.downPayment,
-    cell: (c) => <Number value={c.downPayment} />,
+    sort: (row) => row.downPayments,
+    cell: (row) => <Count value={row.downPayments} />,
   },
   {
     key: "active",
     header: "Siswa Aktif",
     align: "right",
-    sort: (c) => c.active,
-    cell: (c) => <Number value={c.active} tone="success" />,
+    sort: (row) => row.active,
+    cell: (row) => <Count value={row.active} tone="success" />,
   },
   {
     key: "left",
     header: "Keluar / Cuti",
     align: "right",
-    sort: (c) => c.leftOrOnLeave,
-    cell: (c) => <Number value={c.leftOrOnLeave} tone="danger" />,
+    sort: (row) => row.leftOrOnLeave,
+    cell: (row) => <Count value={row.leftOrOnLeave} tone="danger" />,
   },
 ]
 
-export function ConsultantTable() {
+export function ConsultantTable({ consultants }: { consultants: readonly ConsultantRow[] }) {
   return (
     <section className="card stack">
       <div className="row row-between row-wrap">
@@ -74,13 +73,13 @@ export function ConsultantTable() {
             Keluar / Cuti satu-satunya angka di tabel ini yang makin kecil makin baik.
           </span>
         </div>
-        <span className="pill tabular">{CONSULTANTS.length} PIC</span>
+        <span className="pill tabular">{consultants.length} PIC</span>
       </div>
 
       <DataTable
-        rows={CONSULTANTS}
+        rows={consultants}
         columns={COLUMNS}
-        rowKey={(c) => c.name}
+        rowKey={(row) => row.pic.id}
         defaultSort={{ key: "handled", dir: "desc" }}
         emptyText="Belum ada PIC yang memegang siswa."
       />

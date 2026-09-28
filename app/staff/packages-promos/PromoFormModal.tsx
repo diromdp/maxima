@@ -1,148 +1,149 @@
 "use client"
 
-import { Group, Modal, MultiSelect, NumberInput, Select, TextInput } from "@mantine/core"
-import { DateInput } from "@mantine/dates"
-import { useState } from "react"
+import { MultiSelect, NumberInput, Select, TextInput } from "@mantine/core"
+import { DateInput, DatesProvider } from "@mantine/dates"
+import { schemaResolver, useForm } from "@mantine/form"
 
-import { notify } from "@/src/lib/notify"
+import { FormModal } from "@/src/components/ui/FormModal"
+import { savePromo } from "@/src/entities/package/actions"
+import {
+  DISCOUNT_TYPES,
+  EDITABLE_PROMO_STATUSES,
+  type PackageView,
+  promoFormSchema,
+  type PromoForm,
+  type PromoView,
+} from "@/src/entities/package/schema"
+import { useActionForm } from "@/src/lib/use-action-form"
 
-import { PACKAGES } from "../../(public)/register/data"
-import { DISCOUNT_TYPES, type DiscountType, type Promo, PROMO_STATUSES } from "./sample"
-
-const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
+const formOf = (initial: PromoView | undefined): PromoForm => ({
+  name: initial?.name ?? "",
+  code: initial?.code ?? "",
+  discountType: initial?.discountType ?? "Persentase",
+  value: (initial?.discountType === "Nominal" ? initial.amountIdr : initial?.percent) ?? "",
+  packageIds: initial?.packages.map((pkg) => pkg.id) ?? [],
+  startsOn: initial?.startsOn ?? "",
+  endsOn: initial?.endsOn ?? "",
+  status: initial && initial.status !== "DRAFT" ? "AKTIF" : "DRAFT",
+})
 
 export function PromoFormModal({
-  opened,
-  onClose,
   initial,
+  packages,
+  onClose,
 }: {
-  opened: boolean
+  initial: PromoView | undefined
+  packages: readonly PackageView[]
   onClose: () => void
-  initial?: Promo
 }) {
-  const [discountType, setDiscountType] = useState<DiscountType>(
-    initial?.discountType ?? "Persentase",
-  )
+  const form = useForm<PromoForm>({
+    initialValues: formOf(initial),
+    validate: schemaResolver(promoFormSchema, { sync: true }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) => savePromo(initial?.id ?? null, values),
+    successMessage: initial ? `Perubahan ${initial.name} disimpan.` : "Promo baru disimpan.",
+    invalidates: [["promos"]],
+    onSuccess: onClose,
+  })
+
+  const isPercent = form.values.discountType === "Persentase"
+  const selected = form.values.packageIds
+  const packageOptions = packages
+    .filter((pkg) => pkg.status === "Aktif" || selected.includes(pkg.id))
+    .map((pkg) => ({ value: pkg.id, label: pkg.name }))
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
+    <FormModal
       title={initial ? `Ubah ${initial.name}` : "Tambah Promo"}
       size="lg"
-      styles={TITLE_STYLE}
+      submitLabel={initial ? "Simpan Perubahan" : "Simpan Promo"}
+      formError={formError}
+      isPending={isPending}
+      onSubmit={submit}
+      onClose={onClose}
     >
-      <form
-        className="stack stack-lg"
-        onSubmit={(event) => {
-          event.preventDefault()
-          notify.success(initial ? `Perubahan ${initial.name} disimpan.` : "Promo baru disimpan.")
-          onClose()
-        }}
-        onReset={onClose}
-      >
-        <div className="grid-2">
-          <TextInput
-            name="name"
-            label="Nama Promo"
-            placeholder="Promo Awal Tahun"
-            defaultValue={initial?.name}
-            required
-          />
-          <TextInput
-            name="code"
-            label="Kode Voucher"
-            description="Yang diketik siswa di formulir pendaftaran."
-            placeholder="AWAL2026"
-            defaultValue={initial?.code}
-            required
-          />
-        </div>
-
-        <div className="grid-2">
-          <Select
-            name="discountType"
-            label="Jenis Diskon"
-            data={[...DISCOUNT_TYPES]}
-            value={discountType}
-            onChange={(value) => value && setDiscountType(value as DiscountType)}
-            allowDeselect={false}
-            required
-          />
-          {discountType === "Persentase" ? (
-            <NumberInput
-              name="value"
-              label="Nilai Diskon"
-              placeholder="10"
-              suffix=" %"
-              min={1}
-              max={100}
-              hideControls
-              defaultValue={initial?.discountType === "Persentase" ? initial.value : undefined}
-              required
-            />
-          ) : (
-            <NumberInput
-              name="value"
-              label="Nilai Diskon"
-              placeholder="1.500.000"
-              prefix="Rp "
-              thousandSeparator="."
-              decimalSeparator=","
-              min={1}
-              hideControls
-              defaultValue={initial?.discountType === "Nominal" ? initial.value : undefined}
-              required
-            />
-          )}
-        </div>
-
-        <MultiSelect
-          name="packageIds"
-          label="Berlaku Untuk"
-          description="Kosongkan bila berlaku untuk semua paket."
-          placeholder="Semua Paket"
-          data={PACKAGES.map((pkg) => ({ value: pkg.id, label: pkg.name }))}
-          defaultValue={initial ? [...initial.packageIds] : []}
-          clearable
+      <div className="grid-2">
+        <TextInput
+          label="Nama Promo"
+          placeholder="Promo Awal Tahun"
+          withAsterisk
+          data-autofocus
+          {...form.getInputProps("name")}
         />
+        <TextInput
+          label="Kode Voucher"
+          description="Yang diketik siswa di formulir pendaftaran."
+          placeholder="AWAL2026"
+          withAsterisk
+          {...form.getInputProps("code")}
+          onChange={(event) => form.setFieldValue("code", event.currentTarget.value.toUpperCase())}
+        />
+      </div>
 
+      <div className="grid-2">
+        <Select
+          label="Jenis Diskon"
+          data={[...DISCOUNT_TYPES]}
+          allowDeselect={false}
+          withAsterisk
+          {...form.getInputProps("discountType")}
+          onChange={(value) => {
+            if (!value || value === form.values.discountType) return
+            form.setValues({ discountType: value as PromoForm["discountType"], value: "" })
+          }}
+        />
+        <NumberInput
+          key={form.values.discountType}
+          label="Nilai Diskon"
+          placeholder={isPercent ? "10" : "1.500.000"}
+          min={1}
+          max={isPercent ? 100 : undefined}
+          allowDecimal={false}
+          hideControls
+          withAsterisk
+          {...(isPercent
+            ? { suffix: " %" }
+            : { prefix: "Rp ", thousandSeparator: ".", decimalSeparator: "," })}
+          {...form.getInputProps("value")}
+        />
+      </div>
+
+      <MultiSelect
+        label="Berlaku Untuk"
+        description="Kosongkan bila berlaku untuk semua paket."
+        placeholder={selected.length === 0 ? "Semua Paket" : undefined}
+        data={packageOptions}
+        clearable
+        {...form.getInputProps("packageIds")}
+      />
+
+      <DatesProvider settings={{ locale: "id" }}>
         <div className="grid-3">
           <DateInput
-            name="start"
             label="Mulai"
-            placeholder="dd/mm/yyyy"
+            placeholder="Pilih tanggal"
             valueFormat="DD/MM/YYYY"
-            defaultValue={initial ? new Date(initial.start) : undefined}
-            required
+            withAsterisk
+            {...form.getInputProps("startsOn")}
           />
           <DateInput
-            name="end"
             label="Selesai"
-            placeholder="dd/mm/yyyy"
+            placeholder="Pilih tanggal"
             valueFormat="DD/MM/YYYY"
-            defaultValue={initial ? new Date(initial.end) : undefined}
-            required
+            withAsterisk
+            {...form.getInputProps("endsOn")}
           />
           <Select
-            name="status"
             label="Status"
-            data={[...PROMO_STATUSES]}
-            defaultValue={initial?.status ?? "DRAFT"}
+            description="KEDALUWARSA terbaca sendiri setelah tanggal selesai."
+            data={[...EDITABLE_PROMO_STATUSES]}
             allowDeselect={false}
-            required
+            {...form.getInputProps("status")}
           />
         </div>
-
-        <Group justify="flex-end">
-          <button type="reset" className="btn btn-secondary">
-            Batal
-          </button>
-          <button type="submit" className="btn btn-primary">
-            {initial ? "Simpan Perubahan" : "Simpan Promo"}
-          </button>
-        </Group>
-      </form>
-    </Modal>
+      </DatesProvider>
+    </FormModal>
   )
 }

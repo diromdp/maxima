@@ -1,40 +1,139 @@
 "use client"
 
-import { Select } from "@mantine/core"
+import { SegmentedControl } from "@mantine/core"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
-import { useState } from "react"
 
-import { DataTable } from "@/src/components/data/DataTable"
+import { ListFilter } from "@/src/components/data/ListFilter"
+import { QueryError } from "@/src/components/data/QueryError"
+import { ServerDataTable } from "@/src/components/data/ServerDataTable"
+import type { DataColumn } from "@/src/components/data/TableFrame"
 import { Notice } from "@/src/components/ui/Notice"
-import { formatPercent } from "@/src/lib/format"
+import { academicPeriodsQuery } from "@/src/entities/class/queries"
+import { issueReportCard } from "@/src/entities/report-card/actions"
+import { reportQueueQuery } from "@/src/entities/report-card/queries"
+import {
+  QUEUE_STATUSES,
+  REPORT_CARD_FILTERS,
+  type QueueRow,
+  type QueueStatus,
+} from "@/src/entities/report-card/schema"
+import { useRead } from "@/src/lib/api/use-read"
 import { notify } from "@/src/lib/notify"
+import { useListParams } from "@/src/lib/use-list-params"
 
-import { isReady, LEVELS, PERIOD, QUEUE, type QueueRow } from "./sample"
+import { useMasterOptions } from "@/src/entities/master-data/use-master-options"
 
-const ALL = "Semua"
+const ALL = "all"
+const READY = 100
+const LOW = 75
 
-const uniqueBranches = Array.from(new Set(QUEUE.map((row) => row.branch)))
+const STATUS_BADGE: Readonly<Record<QueueStatus, string>> = {
+  "Siap Terbit": "badge-success",
+  "Belum Lengkap": "badge-danger",
+  Terbit: "badge-info",
+}
 
-function Progress({ ratio }: { ratio: number }) {
-  const tone = ratio >= 1 ? "success" : ratio < 0.75 ? "danger" : "warning"
+function Progress({ percent }: { percent: number }) {
+  const tone = percent >= READY ? "success" : percent < LOW ? "danger" : "warning"
+  const label = `${Math.floor(percent)}%`
   return (
     <div className="row" style={{ minWidth: 110 }}>
       <div className={`progress progress-${tone}`} style={{ flex: 1 }}>
-        <div className="progress-fill" style={{ width: formatPercent(ratio) }} />
+        <div className="progress-fill" style={{ width: `${percent}%` }} />
       </div>
-      <span className={`caption tabular text-${tone}`}>{formatPercent(ratio)}</span>
+      <span className={`caption tabular text-${tone}`}>{label}</span>
     </div>
   )
 }
 
-export function ReportQueue({ readOnly }: { readOnly: boolean }) {
-  const [branch, setBranch] = useState(ALL)
-  const [level, setLevel] = useState(ALL)
+export const detailHref = (row: Pick<QueueRow, "nis" | "level" | "period">) =>
+  `/staff/report-cards/${encodeURIComponent(row.nis)}?level=${row.level.id}&period=${row.period.id}`
 
-  const rows = QUEUE.filter(
-    (row) => (branch === ALL || row.branch === branch) && (level === ALL || row.level === level),
+function IssueButton({ row, canEdit }: { row: QueueRow; canEdit: boolean }) {
+  const queryClient = useQueryClient()
+  const issue = useMutation({ mutationFn: issueReportCard })
+
+  if (row.status === "Terbit") {
+    return (
+      <Link className="btn btn-secondary btn-sm" href={detailHref(row)}>
+        Lihat Raport
+      </Link>
+    )
+  }
+
+  const blockedReason = !canEdit
+    ? "Peran Anda hanya dapat melihat antrian ini."
+    : row.status !== "Siap Terbit"
+      ? "Absensi dan nilai periode ini harus 100% terisi dulu."
+      : undefined
+
+  async function submit() {
+    const result = await issue.mutateAsync({
+      nis: row.nis,
+      levelId: row.level.id,
+      periodId: row.period.id,
+    })
+    if (!result.ok) return notify.error(result.message)
+    notify.success(`Raport ${row.name} level ${row.level.name} diterbitkan.`)
+    await Promise.all(
+      [["report-cards"], ["report-card"]].map((queryKey) =>
+        queryClient.invalidateQueries({ queryKey }),
+      ),
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      className="btn btn-primary btn-sm"
+      disabled={blockedReason !== undefined || issue.isPending}
+      title={blockedReason}
+      onClick={() => void submit()}
+    >
+      {issue.isPending ? "Menerbitkan..." : "Terbitkan Raport"}
+    </button>
   )
-  const readyCount = rows.filter(isReady).length
+}
+
+function columnsFor(canEdit: boolean): readonly DataColumn<QueueRow>[] {
+  return [
+    {
+      key: "name",
+      header: "Nama Siswa",
+      cell: (row) => (
+        <Link className="link" href={detailHref(row)}>
+          {row.name}
+        </Link>
+      ),
+    },
+    { key: "class", header: "Kelas", cell: (row) => row.class.name },
+    { key: "level", header: "Level", cell: (row) => row.level.name },
+    { key: "period", header: "Periode", cell: (row) => row.period.name },
+    {
+      key: "attendance",
+      header: "Absensi",
+      cell: (row) => <Progress percent={row.attendancePercent} />,
+    },
+    { key: "scores", header: "Nilai", cell: (row) => <Progress percent={row.scoresPercent} /> },
+    {
+      key: "status",
+      header: "Status",
+      cell: (row) => <span className={`badge ${STATUS_BADGE[row.status]}`}>{row.status}</span>,
+    },
+    {
+      key: "actions",
+      header: "Aksi",
+      cell: (row) => <IssueButton row={row} canEdit={canEdit} />,
+    },
+  ]
+}
+
+export function ReportQueue({ canEdit }: { canEdit: boolean }) {
+  const { params, setParams } = useListParams(REPORT_CARD_FILTERS)
+  const queue = useRead(reportQueueQuery(params))
+  const periods = useRead(academicPeriodsQuery())
+  const { branches, levels } = useMasterOptions()
 
   return (
     <div className="stack stack-lg">
@@ -44,114 +143,51 @@ export function ReportQueue({ readOnly }: { readOnly: boolean }) {
 
       <section className="card stack">
         <div className="row row-between row-wrap" style={{ alignItems: "flex-end" }}>
-          <div className="row row-wrap" style={{ gap: 12 }}>
-            <Select
-              label="Cabang"
-              size="sm"
-              w={160}
-              allowDeselect={false}
-              data={[ALL, ...uniqueBranches]}
-              value={branch}
-              onChange={(value) => value && setBranch(value)}
-            />
-            <Select
-              label="Level"
-              size="sm"
-              w={120}
-              allowDeselect={false}
-              data={[ALL, ...LEVELS]}
-              value={level}
-              onChange={(value) => value && setLevel(value)}
-            />
-            <Select
+          <div className="row row-wrap" style={{ gap: 8 }}>
+            <ListFilter name="branch" label="Cabang" options={branches} />
+            <ListFilter name="level" label="Level" options={levels} />
+            <ListFilter
+              name="period"
               label="Periode"
-              size="sm"
-              w={160}
-              allowDeselect={false}
-              data={[PERIOD.label]}
-              value={PERIOD.label}
-              readOnly
+              placeholder="Periode berjalan"
+              options={(periods.data?.data ?? []).map((period) => ({
+                value: period.id,
+                label: period.name,
+              }))}
             />
           </div>
-          <span className="caption text-muted">
-            {readyCount} dari {rows.length} siswa siap terbit
-          </span>
+          {queue.data && (
+            <span className="caption text-muted tabular">
+              {queue.data.readyCount} dari {queue.data.meta.total} siswa siap terbit
+            </span>
+          )}
         </div>
 
-        <DataTable<QueueRow>
-          rows={rows}
-          rowKey={(row) => `${row.nis}-${row.level}`}
-          defaultSort={{ key: "nama", dir: "asc" }}
-          stickyLast
-          filter={{
-            value: (row) => (isReady(row) ? "Siap Terbit" : "Belum Lengkap"),
-            options: ["Siap Terbit", "Belum Lengkap"],
-          }}
-          columns={[
-            {
-              key: "nama",
-              header: "Nama Siswa",
-              sort: (row) => row.name,
-              cell: (row) => (
-                <Link className="link" href={`/staff/report-cards/${row.nis}?level=${row.level}`}>
-                  {row.name}
-                </Link>
-              ),
-            },
-            {
-              key: "kelas",
-              header: "Kelas",
-              sort: (row) => row.className,
-              cell: (row) => row.className,
-            },
-            { key: "level", header: "Level", sort: (row) => row.level, cell: (row) => row.level },
-            { key: "periode", header: "Periode", cell: (row) => row.period },
-            {
-              key: "absensi",
-              header: "Absensi",
-              sort: (row) => row.attendanceFilled,
-              cell: (row) => <Progress ratio={row.attendanceFilled} />,
-            },
-            {
-              key: "nilai",
-              header: "Nilai",
-              sort: (row) => row.scoresFilled,
-              cell: (row) => <Progress ratio={row.scoresFilled} />,
-            },
-            {
-              key: "status",
-              header: "Status",
-              sort: (row) => Number(isReady(row)),
-              cell: (row) =>
-                isReady(row) ? (
-                  <span className="badge badge-success">Siap Terbit</span>
-                ) : (
-                  <span className="badge badge-danger">Belum Lengkap</span>
-                ),
-            },
-            {
-              key: "aksi",
-              header: "Aksi",
-              cell: (row) => (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  disabled={readOnly || !isReady(row)}
-                  title={
-                    isReady(row)
-                      ? undefined
-                      : "Absensi dan nilai periode ini harus 100% terisi dulu."
-                  }
-                  onClick={() =>
-                    notify.success(`Raport ${row.name} level ${row.level} diterbitkan.`)
-                  }
-                >
-                  Terbitkan Raport
-                </button>
-              ),
-            },
+        <SegmentedControl
+          size="sm"
+          aria-label="Saring status raport"
+          style={{ alignSelf: "flex-start" }}
+          value={params.status ?? ALL}
+          onChange={(value) => setParams({ status: value === ALL ? null : value })}
+          data={[
+            { value: ALL, label: "Semua" },
+            ...QUEUE_STATUSES.map((status) => ({ value: status, label: status })),
           ]}
         />
+
+        {queue.isError ? (
+          <QueryError message={queue.error.message} onRetry={() => void queue.refetch()} />
+        ) : (
+          <ServerDataTable
+            rows={queue.data?.data ?? []}
+            total={queue.data?.meta.total ?? 0}
+            isPending={queue.isPending}
+            columns={columnsFor(canEdit)}
+            rowKey={(row) => `${row.studentId}-${row.level.id}-${row.period.id}`}
+            stickyLast
+            emptyText="Tidak ada siswa di antrian penerbitan untuk saringan ini."
+          />
+        )}
       </section>
     </div>
   )

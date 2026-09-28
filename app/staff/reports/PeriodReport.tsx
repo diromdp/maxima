@@ -1,55 +1,62 @@
 "use client"
 
 import { BarChart, ResponsiveChart } from "@derpdaderp/chartkit"
+import { Skeleton } from "@mantine/core"
 
-import { formatMoney } from "@/src/lib/money"
+import type { IncomeSummary, IncomeTotals, OverdueReport } from "@/src/entities/report/schema"
+import { eur, formatMoney, formatMoneyShort, idr } from "@/src/lib/money"
 import { CHART_THEME } from "@/src/styles/chart-theme"
 
-import { type DebtRow, debtTotal, type MonthlySummary, type PeriodRow } from "./sample"
+export type PeriodRow = IncomeTotals & {
+  readonly key: string
+  readonly label: string
+  readonly caption?: string
+  readonly overdueIdr?: number | null
+}
 
-const toMillions = (amount: number) => Math.round(amount / 100_000) / 10
+const SUMMARY_CARDS = 6
 
 export function SummaryCards({
   summary,
+  overdue,
   unit,
-  debt,
 }: {
-  summary: MonthlySummary
+  summary: IncomeSummary
+  overdue: OverdueReport
   unit: string
-  debt: readonly DebtRow[]
 }) {
   const cards = [
     {
       label: `Total Pemasukan ${unit} (Rp)`,
-      value: formatMoney(summary.paidIdr),
+      value: formatMoney(idr(summary.totalIdr)),
       caption: "Dari seluruh transaksi Rupiah yang berlaku",
       tone: "success",
     },
     {
       label: "Total Siswa Membayar",
-      value: `${summary.payersIdr} Siswa`,
+      value: `${summary.payingStudents} Siswa`,
       caption: "Siswa yang melakukan pembayaran Rupiah",
     },
     {
       label: "Piutang Belum Dibayar (Rp)",
-      value: formatMoney(debtTotal(debt)),
-      caption: `${debt.length} siswa dengan cicilan jatuh tempo belum dibayar`,
+      value: formatMoney(idr(overdue.totalIdr)),
+      caption: `${overdue.studentCount} siswa dengan cicilan jatuh tempo belum dibayar`,
       tone: "danger",
     },
     {
       label: `Total Pemasukan ${unit} (EUR)`,
-      value: formatMoney(summary.paidEur),
-      caption: "Dari seluruh transaksi Euro yang disahkan",
+      value: formatMoney(eur(summary.totalEurCents)),
+      caption: "Dari seluruh transaksi Euro yang berlaku",
       tone: "success",
     },
     {
       label: "Siswa Membayar EUR",
-      value: `${summary.payersEur} Siswa`,
+      value: `${summary.payingStudentsEur} Siswa`,
       caption: "Siswa yang membayar Euro",
     },
     {
       label: "Rata-rata per Siswa (Rp / EUR)",
-      value: `${formatMoney(summary.averageIdr)} · ${formatMoney(summary.averageEur)}`,
+      value: `${formatMoney(idr(summary.averageIdr))} · ${formatMoney(eur(summary.averageEurCents))}`,
       caption: "Pemasukan dibagi siswa membayar, tiap mata uang",
     },
   ]
@@ -72,19 +79,19 @@ export function DistributionCard({
   caption,
   periodHead,
   rows,
-  summary,
+  total,
   emptyText,
 }: {
   title: string
   caption: string
   periodHead: string
   rows: readonly PeriodRow[]
-  summary: MonthlySummary
+  total: IncomeTotals & { readonly overdueIdr?: number | null }
   emptyText: string
 }) {
-  const top = [...rows].sort((a, b) => b.totalIdr.amount - a.totalIdr.amount)[0]
-  const hasTop = top !== undefined && top.totalIdr.amount > 0
-  const hasDebt = rows.some((row) => row.debtIdr !== null)
+  const top = [...rows].sort((a, b) => b.totalIdr - a.totalIdr)[0]
+  const hasTop = top !== undefined && top.totalIdr > 0
+  const hasDebt = rows.some((row) => row.overdueIdr !== undefined)
 
   return (
     <section className="card stack">
@@ -95,12 +102,12 @@ export function DistributionCard({
         </div>
         {hasTop && (
           <span className="caption text-muted">
-            Tertinggi <strong>{top.label}</strong> · {formatMoney(top.totalIdr)}
+            Tertinggi <strong>{top.label}</strong> · {formatMoney(idr(top.totalIdr))}
           </span>
         )}
       </div>
 
-      {summary.paidIdr.amount === 0 ? (
+      {total.totalIdr === 0 ? (
         <div className="row-soft">
           <span className="body-sm text-muted">{emptyText}</span>
         </div>
@@ -115,15 +122,15 @@ export function DistributionCard({
               key={rows.map((row) => row.key).join(",")}
               data={rows.map((row) => ({
                 periode: row.label,
-                Pemasukan: toMillions(row.totalIdr.amount),
-                "Piutang belum dibayar": toMillions(row.debtIdr?.amount ?? 0),
+                Pemasukan: row.totalIdr,
+                "Piutang belum dibayar": row.overdueIdr ?? 0,
               }))}
               dataKey={hasDebt ? ["Pemasukan", "Piutang belum dibayar"] : "Pemasukan"}
               categoryKey="periode"
               theme={CHART_THEME}
               width={width}
               height={height}
-              format={(value) => `${value} jt`}
+              format={(amount) => formatMoneyShort(idr(amount))}
               barRadius={4}
               barGap={hasDebt ? 0.15 : rows.length > 6 ? 0.35 : 0.6}
               groupGap={0.35}
@@ -148,37 +155,67 @@ export function DistributionCard({
           <tbody>
             {rows.map((row) => (
               <tr key={row.key}>
-                <td style={{ fontWeight: 600 }}>{row.label}</td>
+                <td>
+                  <span className="stack" style={{ gap: 0 }}>
+                    <span style={{ fontWeight: 600 }}>{row.label}</span>
+                    {row.caption && <span className="caption text-muted">{row.caption}</span>}
+                  </span>
+                </td>
                 <td className="numeric tabular">
-                  {row.count === 0 ? (
+                  {row.transactionCount === 0 ? (
                     <span className="text-muted">-</span>
                   ) : (
-                    `${row.count} transaksi`
+                    `${row.transactionCount} transaksi`
                   )}
                 </td>
-                <td>{row.count === 0 ? <span className="text-muted">-</span> : row.topMethod}</td>
-                <td className="numeric tabular">{formatMoney(row.totalIdr)}</td>
-                <td className="numeric tabular">{formatMoney(row.totalEur)}</td>
+                <td>{row.topMethod ?? <span className="text-muted">-</span>}</td>
+                <td className="numeric tabular">{formatMoney(idr(row.totalIdr))}</td>
+                <td className="numeric tabular">{formatMoney(eur(row.totalEurCents))}</td>
                 {hasDebt && (
                   <td className="numeric tabular text-danger">
-                    {row.debtIdr ? formatMoney(row.debtIdr) : <span className="text-muted">-</span>}
+                    {row.overdueIdr === null || row.overdueIdr === undefined ? (
+                      <span className="text-muted">-</span>
+                    ) : (
+                      formatMoney(idr(row.overdueIdr))
+                    )}
                   </td>
                 )}
               </tr>
             ))}
             <tr style={{ fontWeight: 700 }}>
               <td>Total</td>
-              <td className="numeric tabular">
-                {rows.reduce((sum, row) => sum + row.count, 0)} transaksi
-              </td>
-              <td />
-              <td className="numeric tabular">{formatMoney(summary.paidIdr)}</td>
-              <td className="numeric tabular">{formatMoney(summary.paidEur)}</td>
-              {hasDebt && <td />}
+              <td className="numeric tabular">{total.transactionCount} transaksi</td>
+              <td>{total.topMethod ?? ""}</td>
+              <td className="numeric tabular">{formatMoney(idr(total.totalIdr))}</td>
+              <td className="numeric tabular">{formatMoney(eur(total.totalEurCents))}</td>
+              {hasDebt && (
+                <td className="numeric tabular text-danger">
+                  {total.overdueIdr === null || total.overdueIdr === undefined
+                    ? "-"
+                    : formatMoney(idr(total.overdueIdr))}
+                </td>
+              )}
             </tr>
           </tbody>
         </table>
       </div>
     </section>
+  )
+}
+
+export function PeriodSkeleton() {
+  return (
+    <div className="stack stack-lg" aria-busy="true">
+      <span className="sr-only" role="status">
+        Memuat
+      </span>
+      <div className="grid-3" aria-hidden>
+        {Array.from({ length: SUMMARY_CARDS }, (_, index) => (
+          <Skeleton key={index} height={112} radius="md" />
+        ))}
+      </div>
+      <Skeleton height={420} radius="md" aria-hidden />
+      <Skeleton height={240} radius="md" aria-hidden />
+    </div>
   )
 }

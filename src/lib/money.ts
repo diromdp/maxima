@@ -61,3 +61,9 @@ export function formatMoney(m: Money): string {
     ? `Rp ${RUPIAH.format(m.amount)}`
     : `€ ${EURO.format(Math.round(m.amount / 100))}`
 }
+
+const SHORT = new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 })
+
+export function formatMoneyShort(m: Money): string {
+  return m.currency === "IDR" ? `Rp ${SHORT.format(m.amount)}` : `€ ${SHORT.format(m.amount / 100)}`
+}

@@ -1,71 +1,117 @@
 "use client"
 
-import { Search01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Select, TextInput } from "@mantine/core"
-import { DateInput } from "@mantine/dates"
 import { useState } from "react"
 
-import { DataTable } from "@/src/components/data/DataTable"
+import { ListFilter } from "@/src/components/data/ListFilter"
+import { ListSearch } from "@/src/components/data/ListSearch"
+import { QueryError } from "@/src/components/data/QueryError"
+import { ServerDataTable } from "@/src/components/data/ServerDataTable"
+import type { DataColumn } from "@/src/components/data/TableFrame"
 import { Notice } from "@/src/components/ui/Notice"
+import { paymentsQuery, pendingPaymentsQuery } from "@/src/entities/payment/queries"
+import {
+  LANE_LABEL,
+  PAYMENT_FILTERS,
+  PAYMENT_STATUS_BADGE,
+  PAYMENT_STATUSES,
+  type PaymentRow,
+} from "@/src/entities/payment/schema"
+import { useRead } from "@/src/lib/api/use-read"
 import { DASH, formatDate } from "@/src/lib/format"
 import { formatMoney } from "@/src/lib/money"
+import { useListParams } from "@/src/lib/use-list-params"
 
 import { CashPaymentModal } from "./CashPaymentModal"
+import { ListDateFilter } from "./ListDateFilter"
 import { PaymentDetailModal } from "./PaymentDetailModal"
-import {
-  inRange,
-  LANES,
-  PAYMENT_ROWS,
-  type PaymentRow,
-  pendingQueue,
-  STATUS_BADGE,
-  STATUSES,
-} from "./sample"
 
-const ALL = "Semua"
-
-const isoDate = (value: Date | string | null): string | null =>
-  value === null ? null : new Date(value).toISOString().slice(0, 10)
+const LANE_OPTIONS = (["IDR", "EUR"] as const).map((value) => ({
+  value,
+  label: LANE_LABEL[value],
+}))
+const STATUS_OPTIONS = PAYMENT_STATUSES.map((value) => ({ value, label: value }))
 
 export function PaymentsTable({
   canRecord,
   canRatify,
+  viewerId,
 }: {
   canRecord: boolean
   canRatify: boolean
+  viewerId: string
 }) {
-  const [query, setQuery] = useState("")
-  const [lane, setLane] = useState(ALL)
-  const [status, setStatus] = useState(ALL)
-  const [from, setFrom] = useState<string | null>(null)
-  const [to, setTo] = useState<string | null>(null)
-  const [recording, setRecording] = useState(false)
-  const [detail, setDetail] = useState<PaymentRow | null>(null)
+  const { params, setParams } = useListParams(PAYMENT_FILTERS)
+  const payments = useRead(paymentsQuery(params))
+  const pending = useRead(pendingPaymentsQuery())
+  const [isRecording, setIsRecording] = useState(false)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const pendingTotal = pending.data?.total ?? 0
 
-  const needle = query.trim().toLowerCase()
-  const rows = PAYMENT_ROWS.filter(
-    (row) =>
-      (lane === ALL || row.lane === lane) &&
-      (status === ALL || row.status === status) &&
-      inRange(row, from, to) &&
-      (needle === "" ||
-        row.studentName.toLowerCase().includes(needle) ||
-        (row.contractNumber ?? "").toLowerCase().includes(needle)),
-  )
-  const pending = pendingQueue(PAYMENT_ROWS).length
+  const columns: readonly DataColumn<PaymentRow>[] = [
+    { key: "tanggal", header: "Tanggal", cell: (row) => formatDate(row.paidOn) },
+    {
+      key: "siswa",
+      header: "Siswa",
+      cell: (row) => (
+        <div className="stack" style={{ gap: 0 }}>
+          <span style={{ fontWeight: 600 }}>{row.student.name}</span>
+          <span className="caption text-muted">{row.student.nis ?? "Belum ber-NIS"}</span>
+        </div>
+      ),
+    },
+    {
+      key: "kontrak",
+      header: "No. Kontrak",
+      cell: (row) => row.contractNumber ?? <span className="text-muted">{DASH}</span>,
+    },
+    { key: "jalur", header: "Jalur", cell: (row) => LANE_LABEL[row.currency] },
+    {
+      key: "nominal",
+      header: "Nominal",
+      align: "right",
+      cell: (row) => (
+        <span className="tabular">
+          {formatMoney({ amount: row.amount, currency: row.currency })}
+        </span>
+      ),
+    },
+    { key: "metode", header: "Metode", cell: (row) => row.method },
+    {
+      key: "status",
+      header: "Status",
+      cell: (row) => (
+        <span className={`badge ${PAYMENT_STATUS_BADGE[row.status]}`}>{row.status}</span>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "Aksi",
+      cell: (row) => {
+        const isRatifying = row.status === "Menunggu" && canRatify
+        return (
+          <button
+            type="button"
+            className={`btn btn-sm ${isRatifying ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setDetailId(row.id)}
+          >
+            {isRatifying ? "Sahkan" : "Detail"}
+          </button>
+        )
+      },
+    },
+  ]
 
   return (
     <div className="stack stack-lg">
-      {pending > 0 && (
+      {pendingTotal > 0 && (
         <Notice
           tone="warning"
-          title={`${pending} pembayaran menunggu pengesahan`}
+          title={`${pendingTotal} pembayaran menunggu pengesahan`}
           actions={
             <button
               type="button"
               className="btn btn-secondary btn-sm"
-              onClick={() => setStatus("Menunggu")}
+              onClick={() => setParams({ status: "Menunggu" })}
             >
               Lihat antrian
             </button>
@@ -79,146 +125,56 @@ export function PaymentsTable({
       <section className="card stack">
         <div className="row row-between row-wrap">
           <div className="row row-wrap" style={{ gap: 8 }}>
-            <TextInput
-              aria-label="Cari nama siswa atau nomor kontrak"
-              placeholder="Cari nama siswa atau nomor kontrak"
-              size="sm"
-              leftSection={<HugeiconsIcon icon={Search01Icon} size={16} strokeWidth={1.5} />}
-              value={query}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-              style={{ flex: "1 1 240px", maxWidth: 320 }}
+            <ListSearch label="Cari nama siswa atau nomor kontrak" />
+            <ListFilter
+              name="currency"
+              label="jalur"
+              placeholder="Jalur: Semua"
+              options={LANE_OPTIONS}
             />
-            <Select
-              aria-label="Jalur"
-              size="sm"
-              w={150}
-              allowDeselect={false}
-              data={[ALL, ...LANES].map((value) => ({
-                value,
-                label: value === ALL ? "Jalur: Semua" : value,
-              }))}
-              value={lane}
-              onChange={(value) => value && setLane(value)}
+            <ListFilter
+              name="status"
+              label="status"
+              placeholder="Status: Semua"
+              options={STATUS_OPTIONS}
             />
-            <Select
-              aria-label="Status"
-              size="sm"
-              w={150}
-              allowDeselect={false}
-              data={[ALL, ...STATUSES].map((value) => ({
-                value,
-                label: value === ALL ? "Status: Semua" : value,
-              }))}
-              value={status}
-              onChange={(value) => value && setStatus(value)}
-            />
-            <DateInput
-              aria-label="Dari tanggal"
-              placeholder="Dari tanggal"
-              size="sm"
-              w={150}
-              valueFormat="DD/MM/YYYY"
-              clearable
-              value={from}
-              onChange={(value) => setFrom(isoDate(value))}
-            />
-            <DateInput
-              aria-label="Sampai tanggal"
-              placeholder="Sampai tanggal"
-              size="sm"
-              w={150}
-              valueFormat="DD/MM/YYYY"
-              clearable
-              value={to}
-              onChange={(value) => setTo(isoDate(value))}
-            />
+            <ListDateFilter name="from" label="Dari tanggal" />
+            <ListDateFilter name="to" label="Sampai tanggal" />
           </div>
           {canRecord && (
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              onClick={() => setRecording(true)}
+              onClick={() => setIsRecording(true)}
             >
               Catat Pembayaran Tunai
             </button>
           )}
         </div>
 
-        <DataTable<PaymentRow>
-          rows={rows}
-          rowKey={(row) => row.id}
-          defaultSort={{ key: "tanggal", dir: "desc" }}
-          stickyLast
-          emptyText="Tidak ada transaksi yang cocok."
-          columns={[
-            {
-              key: "tanggal",
-              header: "Tanggal",
-              sort: (row) => row.date,
-              cell: (row) => formatDate(row.date),
-            },
-            {
-              key: "siswa",
-              header: "Siswa",
-              sort: (row) => row.studentName,
-              cell: (row) => (
-                <div className="stack" style={{ gap: 0 }}>
-                  <span style={{ fontWeight: 600 }}>{row.studentName}</span>
-                  <span className="caption text-muted">{row.nis}</span>
-                </div>
-              ),
-            },
-            {
-              key: "kontrak",
-              header: "No. Kontrak",
-              cell: (row) => row.contractNumber ?? <span className="text-muted">{DASH}</span>,
-            },
-            { key: "jalur", header: "Jalur", sort: (row) => row.lane, cell: (row) => row.lane },
-            {
-              key: "nominal",
-              header: "Nominal",
-              align: "right",
-              sort: (row) => row.amount.amount,
-              cell: (row) => formatMoney(row.amount),
-            },
-            {
-              key: "metode",
-              header: "Metode",
-              sort: (row) => row.method,
-              cell: (row) => row.method,
-            },
-            {
-              key: "status",
-              header: "Status",
-              sort: (row) => row.status,
-              cell: (row) => (
-                <span className={`badge ${STATUS_BADGE[row.status]}`}>{row.status}</span>
-              ),
-            },
-            {
-              key: "aksi",
-              header: "Aksi",
-              cell: (row) => (
-                <button
-                  type="button"
-                  className={`btn btn-sm ${row.status === "Menunggu" && canRatify ? "btn-primary" : "btn-secondary"}`}
-                  onClick={() => setDetail(row)}
-                >
-                  {row.status === "Menunggu" && canRatify ? "Sahkan" : "Detail"}
-                </button>
-              ),
-            },
-          ]}
-        />
+        {payments.isError ? (
+          <QueryError message={payments.error.message} onRetry={() => void payments.refetch()} />
+        ) : (
+          <ServerDataTable
+            rows={payments.data?.data ?? []}
+            total={payments.data?.meta.total ?? 0}
+            isPending={payments.isPending}
+            columns={columns}
+            rowKey={(row) => row.id}
+            stickyLast
+            emptyText="Tidak ada transaksi yang cocok."
+          />
+        )}
       </section>
 
-      <CashPaymentModal opened={recording} onClose={() => setRecording(false)} />
-      {detail && (
+      {isRecording && <CashPaymentModal onClose={() => setIsRecording(false)} />}
+      {detailId && (
         <PaymentDetailModal
-          key={detail.id}
-          row={detail}
+          key={detailId}
+          paymentId={detailId}
           canRatify={canRatify}
-          onClose={() => setDetail(null)}
+          viewerId={viewerId}
+          onClose={() => setDetailId(null)}
         />
       )}
     </div>

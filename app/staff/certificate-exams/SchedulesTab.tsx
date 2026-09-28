@@ -1,25 +1,33 @@
 "use client"
 
+import { Skeleton } from "@mantine/core"
 import { useState } from "react"
 
 import { DataTable, type DataColumn } from "@/src/components/data/DataTable"
+import { QueryError } from "@/src/components/data/QueryError"
+import { SkeletonRows } from "@/src/components/data/SkeletonRows"
+import { examRegistrantsQuery, examSchedulesQuery } from "@/src/entities/certificate/queries"
+import {
+  type ExamRegistrantRow,
+  type ExamScheduleRow,
+  PAYMENT_BADGE,
+  REGISTRATION_BADGE,
+} from "@/src/entities/certificate/schema"
+import { useRead } from "@/src/lib/api/use-read"
 import { formatDate, formatDateLong } from "@/src/lib/format"
-import { notify } from "@/src/lib/notify"
+import { useUrlParam } from "@/src/lib/use-url-param"
 
 import { RegisterStudentsModal } from "./RegisterStudentsModal"
 import { ScheduleFormModal } from "./ScheduleFormModal"
-import {
-  type ExamRecommendation,
-  isFull,
-  PAYMENT_BADGE,
-  quotaLabel,
-  type Registrant,
-  REGISTRANTS_BY_SCHEDULE,
-  REGISTRATION_BADGE,
-  SCHEDULES,
-} from "./sample"
 
-const COLUMNS: readonly DataColumn<Registrant>[] = [
+const SCHEDULE_SKELETONS = 4
+const SKELETON_ROWS = 5
+const COLUMN_COUNT = 5
+
+export const quotaLabel = (schedule: ExamScheduleRow) =>
+  `${schedule.registeredCount} / ${schedule.capacity} Terdaftar`
+
+const COLUMNS: readonly DataColumn<ExamRegistrantRow>[] = [
   {
     key: "nis",
     header: "NIS",
@@ -27,12 +35,17 @@ const COLUMNS: readonly DataColumn<Registrant>[] = [
     cell: (row) => <span className="tabular text-muted">{row.nis}</span>,
   },
   {
-    key: "studentName",
+    key: "name",
     header: "Nama Siswa",
-    sort: (row) => row.studentName,
-    cell: (row) => <span style={{ fontWeight: 600 }}>{row.studentName}</span>,
+    sort: (row) => row.name,
+    cell: (row) => <span style={{ fontWeight: 600 }}>{row.name}</span>,
   },
-  { key: "program", header: "Program", sort: (row) => row.program, cell: (row) => row.program },
+  {
+    key: "program",
+    header: "Program",
+    sort: (row) => row.program ?? "",
+    cell: (row) => row.program ?? <span className="text-faint">-</span>,
+  },
   {
     key: "registeredAt",
     header: "Tanggal Daftar",
@@ -42,42 +55,19 @@ const COLUMNS: readonly DataColumn<Registrant>[] = [
   {
     key: "payment",
     header: "Status Pembayaran",
-    sort: (row) => row.payment,
-    cell: (row) => <span className={`badge ${PAYMENT_BADGE[row.payment]}`}>{row.payment}</span>,
+    sort: (row) => row.paymentStatus ?? "",
+    cell: (row) =>
+      row.paymentStatus ? (
+        <span className={`badge ${PAYMENT_BADGE[row.paymentStatus]}`}>{row.paymentStatus}</span>
+      ) : (
+        <span className="text-muted">Tidak termasuk paket</span>
+      ),
   },
 ]
 
 export function SchedulesTab({ readOnly }: { readOnly: boolean }) {
-  const [scheduleId, setScheduleId] = useState(SCHEDULES[0].id)
+  const schedules = useRead(examSchedulesQuery())
   const [isFormOpen, setIsFormOpen] = useState(false)
-  const [isRegisterOpen, setIsRegisterOpen] = useState(false)
-  const [added, setAdded] = useState<Readonly<Record<string, readonly Registrant[]>>>({})
-  const baseSchedule = SCHEDULES.find((candidate) => candidate.id === scheduleId) ?? SCHEDULES[0]
-  const addedCount = (id: string) => (added[id] ?? []).length
-  const schedule = {
-    ...baseSchedule,
-    registered: baseSchedule.registered + addedCount(baseSchedule.id),
-  }
-  const registrants = [
-    ...(REGISTRANTS_BY_SCHEDULE[schedule.id] ?? []),
-    ...(added[schedule.id] ?? []),
-  ]
-  const isClosed = schedule.status === "Pendaftaran Ditutup"
-
-  const registerStudents = (students: readonly ExamRecommendation[]) =>
-    setAdded((current) => ({
-      ...current,
-      [schedule.id]: [
-        ...(current[schedule.id] ?? []),
-        ...students.map((student): Registrant => ({
-          nis: student.nis,
-          studentName: student.studentName,
-          program: "Ausbildung",
-          registeredAt: new Date().toISOString().slice(0, 10),
-          payment: "Belum Bayar",
-        })),
-      ],
-    }))
 
   return (
     <div className="stack">
@@ -90,10 +80,54 @@ export function SchedulesTab({ readOnly }: { readOnly: boolean }) {
         )}
       </div>
 
+      {schedules.isError ? (
+        <QueryError message={schedules.error.message} onRetry={() => void schedules.refetch()} />
+      ) : schedules.isPending ? (
+        <div className="grid-4" aria-busy="true">
+          <span className="sr-only" role="status">
+            Memuat
+          </span>
+          {Array.from({ length: SCHEDULE_SKELETONS }, (_, index) => (
+            <Skeleton key={index} height={140} radius="md" aria-hidden />
+          ))}
+        </div>
+      ) : schedules.data.data.length === 0 ? (
+        <section className="card">
+          <p className="body-sm text-muted">
+            Belum ada jadwal ujian.
+            {readOnly ? "" : " Tambahkan lewat tombol Tambah Jadwal Ujian."}
+          </p>
+        </section>
+      ) : (
+        <ScheduleBoard schedules={schedules.data.data} readOnly={readOnly} />
+      )}
+
+      {isFormOpen && <ScheduleFormModal onClose={() => setIsFormOpen(false)} />}
+    </div>
+  )
+}
+
+function ScheduleBoard({
+  schedules,
+  readOnly,
+}: {
+  schedules: readonly ExamScheduleRow[]
+  readOnly: boolean
+}) {
+  const [scheduleId, setScheduleId] = useUrlParam("schedule", schedules[0]!.id, (value) =>
+    schedules.some((schedule) => schedule.id === value),
+  )
+  const schedule = schedules.find((candidate) => candidate.id === scheduleId) ?? schedules[0]!
+  const registrants = useRead(examRegistrantsQuery(schedule.id))
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false)
+  const isClosed = schedule.registrationStatus === "Pendaftaran Ditutup"
+
+  return (
+    <>
       <div className="grid-4" role="radiogroup" aria-label="Pilih jadwal ujian">
-        {SCHEDULES.map((base) => {
-          const candidate = { ...base, registered: base.registered + addedCount(base.id) }
+        {schedules.map((candidate) => {
           const isSelected = candidate.id === schedule.id
+          const isFull = candidate.remainingSeats === 0
           return (
             <button
               key={candidate.id}
@@ -108,8 +142,8 @@ export function SchedulesTab({ readOnly }: { readOnly: boolean }) {
                 <span className="body" style={{ fontWeight: 700 }}>
                   {candidate.name}
                 </span>
-                <span className={`badge ${REGISTRATION_BADGE[candidate.status]}`}>
-                  {candidate.status}
+                <span className={`badge ${REGISTRATION_BADGE[candidate.registrationStatus]}`}>
+                  {candidate.registrationStatus}
                 </span>
               </div>
               <dl className="stack" style={{ gap: 2, margin: 0 }}>
@@ -128,7 +162,7 @@ export function SchedulesTab({ readOnly }: { readOnly: boolean }) {
                 <div className="row" style={{ gap: 4 }}>
                   <dt className="caption text-muted">Kuota:</dt>
                   <dd
-                    className={`caption tabular ${isFull(candidate) ? "text-danger" : ""}`}
+                    className={`caption tabular ${isFull ? "text-danger" : ""}`}
                     style={{ margin: 0, fontWeight: 700 }}
                   >
                     {quotaLabel(candidate)}
@@ -146,27 +180,25 @@ export function SchedulesTab({ readOnly }: { readOnly: boolean }) {
             <h2 className="h5">
               Siswa Terdaftar ({schedule.name}, {formatDateLong(schedule.date)})
             </h2>
-            <span className="caption text-muted">
-              Total {schedule.registered} siswa
-              {registrants.length < schedule.registered
-                ? `, ${registrants.length} ditampilkan di data contoh`
-                : ""}
-            </span>
+            <span className="caption text-muted">Total {schedule.registeredCount} siswa</span>
           </div>
           <div className="row row-wrap" style={{ gap: 8 }}>
-            <button
-              type="button"
+            <a
+              href={`/api/download/exam-schedules/${schedule.id}/registrants/export`}
               className="btn btn-secondary btn-sm"
-              onClick={() => notify.info(`Daftar peserta ${schedule.name} diekspor.`)}
             >
               Export
-            </button>
+            </a>
             {!readOnly && (
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
                 disabled={isClosed}
-                title={isClosed ? "Pendaftaran jadwal ini sudah ditutup" : undefined}
+                title={
+                  isClosed
+                    ? "Pendaftaran jadwal ini sudah ditutup karena kuotanya penuh"
+                    : undefined
+                }
                 onClick={() => setIsRegisterOpen(true)}
               >
                 + Daftarkan Siswa
@@ -175,30 +207,39 @@ export function SchedulesTab({ readOnly }: { readOnly: boolean }) {
           </div>
         </div>
 
-        <DataTable
-          rows={registrants}
-          columns={COLUMNS}
-          rowKey={(row) => row.nis}
-          emptyText={`Belum ada siswa terdaftar di ${schedule.name}.`}
-        />
+        {registrants.isError ? (
+          <QueryError
+            message={registrants.error.message}
+            onRetry={() => void registrants.refetch()}
+          />
+        ) : registrants.isPending ? (
+          <div className="table-scroll" aria-busy="true">
+            <span className="sr-only" role="status">
+              Memuat
+            </span>
+            <table className="table">
+              <tbody>
+                <SkeletonRows columns={COLUMN_COUNT} rows={SKELETON_ROWS} />
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <DataTable
+            rows={registrants.data.data}
+            columns={COLUMNS}
+            rowKey={(row) => row.studentId}
+            emptyText={`Belum ada siswa terdaftar di ${schedule.name}.`}
+          />
+        )}
         <span className="caption text-muted">
-          Status pembayaran dibaca dari Pembayaran, tidak diubah di sini.
+          Biaya ujian termasuk harga paket. Lunas berarti gerbang Ujian Bahasa siswa itu sudah
+          terbuka; siswa Belum Bayar cukup melunasi cicilan paketnya sampai ambang Ujian Bahasa.
         </span>
       </section>
 
-      <RegisterStudentsModal
-        key={`${schedule.id}-${isRegisterOpen}`}
-        opened={isRegisterOpen}
-        onClose={() => setIsRegisterOpen(false)}
-        schedule={schedule}
-        registered={registrants}
-        onRegister={registerStudents}
-      />
-      <ScheduleFormModal
-        key={String(isFormOpen)}
-        opened={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-      />
-    </div>
+      {isRegisterOpen && (
+        <RegisterStudentsModal schedule={schedule} onClose={() => setIsRegisterOpen(false)} />
+      )}
+    </>
   )
 }

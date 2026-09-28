@@ -1,6 +1,8 @@
 import { Skeleton } from "@mantine/core"
 
-const PAGE_SIZE = 10
+import { TableSkeleton } from "@/src/components/data/TableSkeleton"
+
+const LOG_COLUMNS = 5
 
 export default function Loading() {
   return (
@@ -16,16 +18,12 @@ export default function Loading() {
 
       <section className="card stack" aria-hidden>
         <Skeleton height={24} width="30%" radius="xl" />
-        <div className="grid-3">
-          <Skeleton height={40} radius="xl" />
-          <Skeleton height={40} radius="xl" />
-          <Skeleton height={40} radius="xl" />
+        <div className="row row-wrap" style={{ gap: 8 }}>
+          <Skeleton height={36} width={320} radius="xl" />
+          <Skeleton height={36} width={160} radius="xl" />
+          <Skeleton height={36} width={160} radius="xl" />
         </div>
-        <div className="stack stack-sm">
-          {Array.from({ length: PAGE_SIZE }, (_, i) => (
-            <Skeleton key={i} height={48} radius="sm" />
-          ))}
-        </div>
+        <TableSkeleton columns={LOG_COLUMNS} />
       </section>
     </div>
   )

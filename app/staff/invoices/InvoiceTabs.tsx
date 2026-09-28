@@ -2,32 +2,43 @@
 
 import { Tabs } from "@mantine/core"
 
+import { ScrollableTabsList } from "@/src/components/ui/ScrollableTabsList"
+import { useListParams } from "@/src/lib/use-list-params"
+
 import { DueTab } from "./DueTab"
 import { ReceivablesTab } from "./ReceivablesTab"
 import { RemindersTab } from "./RemindersTab"
 
-const TABS = [
+const INVOICE_TABS = [
   { value: "receivables", label: "Laporan Piutang Siswa", panel: <ReceivablesTab /> },
   { value: "due", label: "Tagihan Jatuh Tempo", panel: <DueTab /> },
   { value: "reminders", label: "Riwayat Reminder (Email)", panel: <RemindersTab /> },
 ] as const
 
-export function InvoiceTabs({ initialTab }: { initialTab?: string }) {
-  const initial = TABS.find((tab) => tab.value === initialTab) ?? TABS[0]
+export function InvoiceTabs() {
+  const { params, setParams } = useListParams(["tab"])
+  const tab =
+    INVOICE_TABS.find((candidate) => candidate.value === params.tab)?.value ?? "receivables"
 
   return (
-    <Tabs defaultValue={initial.value} keepMounted={false}>
-      <Tabs.List mb="lg">
-        {TABS.map((tab) => (
-          <Tabs.Tab key={tab.value} value={tab.value}>
-            {tab.label}
+    <Tabs
+      value={tab}
+      onChange={(value) =>
+        value && setParams({ tab: value, branch: null, status: null, search: null })
+      }
+      keepMounted={false}
+    >
+      <ScrollableTabsList>
+        {INVOICE_TABS.map(({ value, label }) => (
+          <Tabs.Tab key={value} value={value}>
+            {label}
           </Tabs.Tab>
         ))}
-      </Tabs.List>
+      </ScrollableTabsList>
 
-      {TABS.map((tab) => (
-        <Tabs.Panel key={tab.value} value={tab.value}>
-          {tab.panel}
+      {INVOICE_TABS.map(({ value, panel }) => (
+        <Tabs.Panel key={value} value={value}>
+          {panel}
         </Tabs.Panel>
       ))}
     </Tabs>

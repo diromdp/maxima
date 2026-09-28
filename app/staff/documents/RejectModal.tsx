@@ -1,83 +1,60 @@
 "use client"
 
-import { Modal, Textarea } from "@mantine/core"
-import { useState } from "react"
+import { Textarea } from "@mantine/core"
+import { schemaResolver, useForm } from "@mantine/form"
 
+import { FormModal } from "@/src/components/ui/FormModal"
 import { Notice } from "@/src/components/ui/Notice"
-
-import type { GroupId } from "./sample"
-
-const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
-
-export type RejectTarget = {
-  readonly nis: string
-  readonly groupId: GroupId
-  readonly studentName: string
-  readonly fileName: string
-  readonly uploadedName?: string
-}
+import { rejectDocument } from "@/src/entities/document/actions"
+import { documentKeysOf } from "@/src/entities/document/queries"
+import { type DocumentItem, rejectDocumentFormSchema } from "@/src/entities/document/schema"
+import { useActionForm } from "@/src/lib/use-action-form"
 
 export function RejectModal({
-  target,
+  nis,
+  studentName,
+  item,
   onClose,
-  onReject,
 }: {
-  target: RejectTarget | null
+  nis: string
+  studentName: string
+  item: DocumentItem
   onClose: () => void
-  onReject: (target: RejectTarget, reason: string) => void
 }) {
-  const [reason, setReason] = useState("")
-  const trimmed = reason.trim()
+  const form = useForm({
+    initialValues: { reason: "" },
+    validate: schemaResolver(rejectDocumentFormSchema, { sync: true }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) => rejectDocument(item.documentId ?? "", item.uploadedAt ?? "", values),
+    successMessage: `${item.name} ditolak. Alasan tampil di portal ${studentName}.`,
+    invalidates: documentKeysOf(nis),
+    onSuccess: onClose,
+  })
 
   return (
-    <Modal
-      opened={target !== null}
+    <FormModal
+      title={`Tolak ${item.name}`}
+      submitLabel="Tolak Berkas"
+      formError={formError}
+      isPending={isPending}
+      onSubmit={submit}
       onClose={onClose}
-      title={target ? `Tolak ${target.fileName}` : "Tolak berkas"}
-      size="md"
-      styles={TITLE_STYLE}
     >
-      {target && (
-        <form
-          className="stack stack-lg"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (trimmed === "") return
-            onReject(target, trimmed)
-            onClose()
-          }}
-        >
-          <Notice tone="warning">
-            Alasan ini dibaca {target.studentName} apa adanya di portal, di samping tombol unggah
-            ulang. Sebut apa yang salah dan apa yang harus diunggah.
-          </Notice>
-          <Textarea
-            label="Alasan penolakan"
-            description={
-              target.uploadedName ? `Berkas yang ditolak: ${target.uploadedName}` : undefined
-            }
-            placeholder="Contoh: Hasil pindai buram, nama tidak terbaca. Unggah ulang dengan pindaian berwarna."
-            autosize
-            minRows={3}
-            value={reason}
-            onChange={(event) => setReason(event.currentTarget.value)}
-            required
-          />
-          <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Batal
-            </button>
-            <button
-              type="submit"
-              className="btn btn-error"
-              disabled={trimmed === ""}
-              title={trimmed === "" ? "Alasan wajib diisi" : undefined}
-            >
-              Tolak Berkas
-            </button>
-          </div>
-        </form>
-      )}
-    </Modal>
+      <Notice tone="warning">
+        Alasan ini dibaca {studentName} apa adanya di portal, di samping tombol unggah ulang. Sebut
+        apa yang salah dan apa yang harus diunggah.
+      </Notice>
+      <Textarea
+        label="Alasan penolakan"
+        description={item.originalName ? `Berkas yang ditolak: ${item.originalName}` : undefined}
+        placeholder="Contoh: Hasil pindai buram, nama tidak terbaca. Unggah ulang dengan pindaian berwarna."
+        autosize
+        minRows={3}
+        withAsterisk
+        {...form.getInputProps("reason")}
+      />
+    </FormModal>
   )
 }

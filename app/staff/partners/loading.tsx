@@ -1,6 +1,11 @@
 import { Skeleton } from "@mantine/core"
 
-import { PARTNERS } from "./sample"
+import { TableSkeleton } from "@/src/components/data/TableSkeleton"
+
+const TAB_WIDTHS = [130, 110, 160, 100]
+const FILTER_WIDTHS = [240, 150, 150, 150]
+const COLUMN_COUNT = 8
+const SKELETON_ROWS = 6
 
 export default function Loading() {
   return (
@@ -15,23 +20,18 @@ export default function Loading() {
       </div>
 
       <div className="row" style={{ gap: 16 }} aria-hidden>
-        <Skeleton height={36} width={130} radius="xl" />
-        <Skeleton height={36} width={110} radius="xl" />
-        <Skeleton height={36} width={160} radius="xl" />
-        <Skeleton height={36} width={100} radius="xl" />
+        {TAB_WIDTHS.map((width) => (
+          <Skeleton key={width} height={36} width={width} radius="xl" />
+        ))}
       </div>
 
       <section className="card stack" aria-hidden>
         <div className="row row-wrap" style={{ gap: 8 }}>
-          <Skeleton height={36} width={240} radius="xl" />
-          <Skeleton height={36} width={150} radius="xl" />
-          <Skeleton height={36} width={200} radius="xl" />
-        </div>
-        <div className="stack stack-sm">
-          {PARTNERS.map((partner) => (
-            <Skeleton key={partner.id} height={52} radius="sm" />
+          {FILTER_WIDTHS.map((width, index) => (
+            <Skeleton key={index} height={36} width={width} radius="xl" />
           ))}
         </div>
+        <TableSkeleton columns={COLUMN_COUNT} rows={SKELETON_ROWS} />
       </section>
     </div>
   )

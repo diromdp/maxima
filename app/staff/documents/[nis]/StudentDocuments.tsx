@@ -1,99 +1,121 @@
 "use client"
 
-import { modals } from "@mantine/modals"
+import { Skeleton } from "@mantine/core"
+import Link from "next/link"
 import { useState } from "react"
 
-import { notify } from "@/src/lib/notify"
+import { QueryError } from "@/src/components/data/QueryError"
+import { PageHeader } from "@/src/components/layout/PageHeader"
+import { documentDetailQuery } from "@/src/entities/document/queries"
+import type { DocumentDetail, DocumentItem } from "@/src/entities/document/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { DASH } from "@/src/lib/format"
 
-import { CompletenessScheme, type FileAction } from "../CompletenessScheme"
-import { RejectModal, type RejectTarget } from "../RejectModal"
-import { type DocumentStudent, GROUPS, updateFile, waitingCount } from "../sample"
+import { CompletenessScheme } from "../CompletenessScheme"
+import { RejectModal } from "../RejectModal"
+import { StaffUploadModal } from "../StaffUploadModal"
+import { VerifyModal } from "../VerifyModal"
+
+type Decision = { kind: "verify" | "reject" | "upload"; item: DocumentItem } | null
+
+function SummaryCard({ summary }: { summary: DocumentDetail["summary"] }) {
+  const facts = [
+    { label: "NIS", value: summary.nis },
+    { label: "Paket", value: summary.package?.name ?? DASH },
+    { label: "Cabang", value: summary.branch?.name ?? DASH },
+    { label: "Program", value: summary.program?.name ?? DASH },
+    { label: "Berkas lengkap", value: `${summary.complete} dari ${summary.total}` },
+    {
+      label: "Menunggu verifikasi",
+      value: summary.pending > 0 ? `${summary.pending} berkas` : "Tidak ada",
+    },
+  ]
+
+  return (
+    <section className="card">
+      <dl className="row row-wrap" style={{ gap: 24, margin: 0 }}>
+        {facts.map(({ label, value }) => (
+          <div key={label} className="stack" style={{ gap: 2 }}>
+            <dt className="caption text-muted">{label}</dt>
+            <dd className="body-sm" style={{ fontWeight: 600, margin: 0 }}>
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="stack stack-lg" aria-busy="true">
+      <span className="sr-only" role="status">
+        Memuat
+      </span>
+      <Skeleton height={68} radius="md" aria-hidden />
+      <div className="grid-2" aria-hidden>
+        {Array.from({ length: 4 }, (_, index) => (
+          <Skeleton key={index} height={360} radius="md" />
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function StudentDocuments({
-  initial,
-  readOnly,
+  nis,
+  canDecide,
+  canUploadResults,
 }: {
-  initial: DocumentStudent
-  readOnly: boolean
+  nis: string
+  canDecide: boolean
+  canUploadResults: boolean
 }) {
-  const [student, setStudent] = useState(initial)
-  const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null)
-  const waiting = waitingCount(student)
-
-  const verify = (action: FileAction) =>
-    modals.openConfirmModal({
-      title: `Verifikasi ${action.fileName}?`,
-      children: `Berkas ${action.fileName} milik ${student.name} ditandai Lengkap dan ikut menghitung kelengkapan rumpunnya. Siswa melihatnya sebagai Terverifikasi.`,
-      labels: { confirm: "Verifikasi", cancel: "Batal" },
-      onConfirm: () => {
-        setStudent((current) =>
-          updateFile(current, action, { status: "Lengkap", reason: undefined }),
-        )
-        notify.success(`${action.fileName} milik ${student.name} terverifikasi.`)
-      },
-    })
-
-  const openReject = (action: FileAction) => {
-    const file = student.files[action.groupId].find(
-      (candidate) => candidate.name === action.fileName,
-    )
-    setRejectTarget({ ...action, studentName: student.name, uploadedName: file?.fileName })
-  }
-
-  const remind = (action: FileAction) =>
-    notify.info(`Pengingat unggah ${action.fileName} dikirim ke email ${student.name}.`)
-
-  const totals = GROUPS.map((group) => student.files[group.id]).flat()
-  const done = totals.filter((file) => file.status === "Lengkap").length
+  const detail = useRead(documentDetailQuery(nis))
+  const [decision, setDecision] = useState<Decision>(null)
+  const close = () => setDecision(null)
+  const studentName = detail.data?.summary.name
 
   return (
     <div className="stack stack-lg">
-      <section className="card">
-        <dl className="row row-wrap" style={{ gap: 24, margin: 0 }}>
-          {[
-            { label: "NIS", value: student.nis },
-            { label: "Paket", value: student.packageName },
-            { label: "Cabang", value: student.branch },
-            { label: "Program", value: student.program },
-            { label: "Berkas lengkap", value: `${done} dari ${totals.length}` },
-            {
-              label: "Menunggu verifikasi",
-              value: waiting > 0 ? `${waiting} berkas` : "Tidak ada",
-            },
-          ].map(({ label, value }) => (
-            <div key={label} className="stack" style={{ gap: 2 }}>
-              <dt className="caption text-muted">{label}</dt>
-              <dd className="body-sm" style={{ fontWeight: 600, margin: 0 }}>
-                {value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <CompletenessScheme
-        student={student}
-        readOnly={readOnly}
-        onVerify={verify}
-        onReject={openReject}
-        onRemind={remind}
+      <PageHeader
+        title={`Skema Kelengkapan Berkas, ${studentName ?? nis}`}
+        subtitle="Empat rumpun berkas siswa ini. Verifikasi dan penolakan di sini langsung tampil di portal siswa."
+        actions={
+          <Link href="/staff/documents" className="btn btn-secondary">
+            Kembali ke Dokumen
+          </Link>
+        }
       />
 
-      <RejectModal
-        key={rejectTarget ? `${rejectTarget.nis}-${rejectTarget.fileName}` : "closed"}
-        target={rejectTarget}
-        onClose={() => setRejectTarget(null)}
-        onReject={(target, reason) => {
-          setStudent((current) =>
-            updateFile(
-              current,
-              { nis: target.nis, groupId: target.groupId, fileName: target.fileName },
-              { status: "Ditolak", reason },
-            ),
-          )
-          notify.success(`${target.fileName} ditolak. Alasan tampil di portal ${student.name}.`)
-        }}
-      />
+      {detail.isError ? (
+        <QueryError message={detail.error.message} onRetry={() => void detail.refetch()} />
+      ) : detail.isPending ? (
+        <DetailSkeleton />
+      ) : (
+        <>
+          <SummaryCard summary={detail.data.summary} />
+          <CompletenessScheme
+            detail={detail.data}
+            canDecide={canDecide}
+            canUploadResults={canUploadResults}
+            onVerify={(item) => setDecision({ kind: "verify", item })}
+            onReject={(item) => setDecision({ kind: "reject", item })}
+            onUpload={(item) => setDecision({ kind: "upload", item })}
+          />
+          {decision?.kind === "upload" && (
+            <StaffUploadModal student={detail.data.summary} item={decision.item} onClose={close} />
+          )}
+        </>
+      )}
+
+      {decision?.kind === "verify" && studentName && (
+        <VerifyModal nis={nis} studentName={studentName} item={decision.item} onClose={close} />
+      )}
+      {decision?.kind === "reject" && studentName && (
+        <RejectModal nis={nis} studentName={studentName} item={decision.item} onClose={close} />
+      )}
     </div>
   )
 }

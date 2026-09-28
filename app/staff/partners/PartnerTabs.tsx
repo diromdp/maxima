@@ -2,33 +2,41 @@
 
 import { Tabs } from "@mantine/core"
 
+import { ScrollableTabsList } from "@/src/components/ui/ScrollableTabsList"
+import { PARTNER_PARAMS } from "@/src/entities/partner/schema"
+import { useListParams } from "@/src/lib/use-list-params"
+
 import { ApplicationsTab } from "./ApplicationsTab"
 import { InterviewPracticeTab } from "./InterviewPracticeTab"
 import { MasterPartnerTab } from "./MasterPartnerTab"
 import { TrackingTab } from "./TrackingTab"
 
-const TAB_VALUES = ["master", "applications", "practice", "tracking"] as const
-type TabValue = (typeof TAB_VALUES)[number]
+const PARTNER_TABS = [
+  { value: "master", label: "Master Partner" },
+  { value: "applications", label: "Pengajuan" },
+  { value: "practice", label: "Latihan Wawancara" },
+  { value: "tracking", label: "Tracking" },
+] as const
 
-const TAB_LABELS: Readonly<Record<TabValue, string>> = {
-  master: "Master Partner",
-  applications: "Pengajuan",
-  practice: "Latihan Wawancara",
-  tracking: "Tracking",
-}
+const CLEARED_PARAMS = Object.fromEntries(PARTNER_PARAMS.map((name) => [name, null]))
 
-export function PartnerTabs({ initialTab, readOnly }: { initialTab?: string; readOnly: boolean }) {
-  const initial = TAB_VALUES.find((value) => value === initialTab) ?? TAB_VALUES[0]
+export function PartnerTabs({ readOnly }: { readOnly: boolean }) {
+  const { params, setParams } = useListParams(["tab"])
+  const tab = PARTNER_TABS.find((candidate) => candidate.value === params.tab)?.value ?? "master"
 
   return (
-    <Tabs defaultValue={initial} keepMounted={false}>
-      <Tabs.List mb="lg">
-        {TAB_VALUES.map((value) => (
+    <Tabs
+      value={tab}
+      onChange={(value) => value && setParams({ ...CLEARED_PARAMS, tab: value })}
+      keepMounted={false}
+    >
+      <ScrollableTabsList>
+        {PARTNER_TABS.map(({ value, label }) => (
           <Tabs.Tab key={value} value={value}>
-            {TAB_LABELS[value]}
+            {label}
           </Tabs.Tab>
         ))}
-      </Tabs.List>
+      </ScrollableTabsList>
 
       <Tabs.Panel value="master">
         <MasterPartnerTab readOnly={readOnly} />

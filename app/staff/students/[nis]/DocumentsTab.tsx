@@ -1,45 +1,85 @@
-import { SquareLock02Icon, ViewIcon } from "@hugeicons/core-free-icons"
+"use client"
+
+import { ViewIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
-import { Panel } from "./Panel"
-import { DOCUMENT_GROUPS, type DocumentGroup } from "./sample"
+import { studentDocumentsQuery } from "@/src/entities/student/queries"
+import type { DocumentState, StudentDocuments } from "@/src/entities/student/schema"
+import { openStoredObject } from "@/src/lib/api/download"
+import { ApiError } from "@/src/lib/api/errors"
+import { useRead } from "@/src/lib/api/use-read"
+import { formatDate } from "@/src/lib/format"
+import { notify } from "@/src/lib/notify"
+
+import { Panel, TabBody } from "./Panel"
+
+type DocumentGroup = StudentDocuments["groups"][number]
+
+const GROUP_TITLES: Readonly<Record<DocumentGroup["group"], string>> = {
+  Pribadi: "Dokumen Pribadi",
+  "Hasil Layanan": "Hasil Layanan",
+  Bewerbung: "Bewerbung",
+  "Dari Betrieb": "Dokumen dari Betrieb",
+}
+
+const STATE_BADGE: Readonly<Record<DocumentState, string>> = {
+  Lengkap: "badge-beres",
+  "Perlu Verifikasi": "badge-berjalan",
+  Diproses: "badge-berjalan",
+  Ditolak: "badge-tindakan",
+  "Belum Diunggah": "badge-terkunci",
+}
+
+async function viewDocument(key: string) {
+  try {
+    await openStoredObject(key)
+  } catch (error) {
+    if (error instanceof ApiError) notify.error(error.message)
+    else throw error
+  }
+}
 
 function completenessBadge(group: DocumentGroup) {
-  const done = group.rows.filter((r) => r.status === "Terverifikasi").length
-  const total = group.rows.length
-  const tone = done === total ? "badge-beres" : done === 0 ? "badge-tindakan" : "badge-berjalan"
+  const tone =
+    group.complete === group.total
+      ? "badge-beres"
+      : group.complete === 0
+        ? "badge-tindakan"
+        : "badge-berjalan"
   return (
     <span className={`badge ${tone} tabular`}>
-      {done}/{total} Lengkap
+      {group.complete}/{group.total} Lengkap
     </span>
   )
 }
 
-export function DocumentsTab() {
+function DocumentsView({ documents }: { documents: StudentDocuments }) {
   return (
     <div className="grid-2">
-      {DOCUMENT_GROUPS.map((group) => (
-        <Panel key={group.id} title={group.title} aside={completenessBadge(group)}>
+      {documents.groups.map((group) => (
+        <Panel key={group.group} title={GROUP_TITLES[group.group]} aside={completenessBadge(group)}>
           <div className="list-rows">
-            {group.rows.map((row) => (
-              <div key={row.name} className="row row-between">
+            {group.items.map((item) => (
+              <div key={item.code ?? item.name} className="row row-between">
                 <div className="stack" style={{ gap: 0, minWidth: 0 }}>
                   <span className="body-sm" style={{ fontWeight: 600 }}>
-                    {row.name}
+                    {item.name}
+                    {item.isOptional && <span className="caption text-muted"> (opsional)</span>}
                   </span>
-                  {row.file && <span className="caption text-muted">{row.file}</span>}
+                  {item.uploadedAt && (
+                    <span className="caption text-muted">
+                      {item.originalName ?? "Berkas"} · {formatDate(item.uploadedAt)}
+                    </span>
+                  )}
                 </div>
                 <div className="row" style={{ gap: 4, flexShrink: 0 }}>
-                  <span
-                    className={`badge ${row.status === "Terverifikasi" ? "badge-beres" : "badge-tindakan"}`}
-                  >
-                    {row.status}
-                  </span>
-                  {row.file && (
+                  <span className={`badge ${STATE_BADGE[item.state]}`}>{item.state}</span>
+                  {item.objectKey && (
                     <button
                       type="button"
                       className="btn btn-ghost btn-icon btn-sm"
-                      aria-label={`Lihat ${row.name}`}
+                      aria-label={`Lihat ${item.name}`}
+                      onClick={() => void viewDocument(item.objectKey ?? "")}
                     >
                       <HugeiconsIcon icon={ViewIcon} size={16} strokeWidth={1.5} />
                     </button>
@@ -50,23 +90,11 @@ export function DocumentsTab() {
           </div>
         </Panel>
       ))}
-
-      <section
-        className="card-soft stack"
-        style={{ alignItems: "center", justifyContent: "center", textAlign: "center", gap: 8 }}
-      >
-        <HugeiconsIcon
-          icon={SquareLock02Icon}
-          size={24}
-          strokeWidth={1.5}
-          className="text-muted"
-          aria-hidden
-        />
-        <h2 className="h6">Dokumen dari Betrieb</h2>
-        <span className="body-sm text-muted">
-          Tersedia setelah status kepesertaan Dapat Vertrag dari partner.
-        </span>
-      </section>
     </div>
   )
+}
+
+export function DocumentsTab({ nis }: { nis: string }) {
+  const documents = useRead(studentDocumentsQuery(nis))
+  return <TabBody query={documents}>{(data) => <DocumentsView documents={data} />}</TabBody>
 }

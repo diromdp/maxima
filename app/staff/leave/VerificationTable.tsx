@@ -3,14 +3,14 @@
 import Link from "next/link"
 
 import { DataTable } from "@/src/components/data/DataTable"
+import { DECISION_LABEL, type PendingLeaveRow, STATE_BADGE } from "@/src/entities/leave/schema"
 import { formatDate } from "@/src/lib/format"
 
-import { historyBadge } from "../../portal/leave/leave"
-import { decisionLabel, type StaffLeave } from "./sample"
+const STAGE_OPTIONS = (
+  ["awaiting-finance", "payment-set", "awaiting-payment-check", "processing"] as const
+).map((state) => STATE_BADGE[state].label)
 
-export function VerificationTable({ rows }: { rows: readonly StaffLeave[] }) {
-  const statuses = [...new Set(rows.map((leave) => historyBadge(leave.state).label))]
-
+export function VerificationTable({ rows }: { rows: readonly PendingLeaveRow[] }) {
   return (
     <DataTable
       rows={rows}
@@ -19,35 +19,35 @@ export function VerificationTable({ rows }: { rows: readonly StaffLeave[] }) {
       stickyLast
       emptyText="Tidak ada pengajuan yang menunggu keputusan."
       filter={{
-        value: (leave) => historyBadge(leave.state).label,
-        options: statuses,
+        value: (leave) => STATE_BADGE[leave.state].label,
+        options: STAGE_OPTIONS,
         allLabel: "Semua tahap",
       }}
       columns={[
         {
           key: "siswa",
           header: "Nama Siswa",
-          sort: (leave) => leave.student.name,
+          sort: (leave) => leave.name,
           cell: (leave) => (
             <div className="stack" style={{ gap: 0 }}>
               <span className="text-ink" style={{ fontWeight: 600 }}>
-                {leave.student.name}
+                {leave.name}
               </span>
-              <span className="caption text-muted tabular">NIS {leave.student.nis}</span>
+              <span className="caption text-muted tabular">NIS {leave.nis ?? "-"}</span>
             </div>
           ),
         },
         {
           key: "program",
           header: "Program / Level",
-          sort: (leave) => leave.student.packageName,
-          cell: (leave) => `${leave.student.packageName} · ${leave.student.level}`,
+          sort: (leave) => leave.program ?? "",
+          cell: (leave) => [leave.program, leave.level].filter(Boolean).join(" · ") || "-",
         },
         {
           key: "cabang",
           header: "Cabang",
-          sort: (leave) => leave.student.branch,
-          cell: (leave) => leave.student.branch,
+          sort: (leave) => leave.branch ?? "",
+          cell: (leave) => leave.branch ?? "-",
         },
         {
           key: "diajukan",
@@ -58,16 +58,16 @@ export function VerificationTable({ rows }: { rows: readonly StaffLeave[] }) {
         {
           key: "mulai",
           header: "Tanggal Mulai",
-          sort: (leave) => leave.start,
-          cell: (leave) => formatDate(leave.start),
+          sort: (leave) => leave.startsOn,
+          cell: (leave) => formatDate(leave.startsOn),
         },
         { key: "alasan", header: "Alasan Cuti", wrap: true, cell: (leave) => leave.reason },
         {
           key: "status",
           header: "Tahap",
-          sort: (leave) => historyBadge(leave.state).label,
+          sort: (leave) => leave.stage,
           cell: (leave) => {
-            const badge = historyBadge(leave.state)
+            const badge = STATE_BADGE[leave.state]
             return <span className={`badge badge-${badge.tone}`}>{badge.label}</span>
           },
         },
@@ -76,7 +76,7 @@ export function VerificationTable({ rows }: { rows: readonly StaffLeave[] }) {
           header: "Aksi",
           cell: (leave) => (
             <Link className="btn btn-primary btn-sm" href={`/staff/leave/${leave.id}`}>
-              {decisionLabel(leave)}
+              {DECISION_LABEL[leave.state] ?? "Detail"}
             </Link>
           ),
         },

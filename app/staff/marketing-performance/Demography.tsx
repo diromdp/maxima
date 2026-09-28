@@ -1,6 +1,11 @@
-import { DEMOGRAPHY, ratio } from "./sample"
+import type { Tally } from "@/src/entities/home/schema"
 
-export function Demography() {
+export type DemographyGroup = {
+  readonly title: string
+  readonly items: readonly Tally[]
+}
+
+export function Demography({ groups }: { groups: readonly DemographyGroup[] }) {
   return (
     <section className="card stack" aria-labelledby="demography-heading">
       <div className="stack" style={{ gap: 2 }}>
@@ -8,29 +13,28 @@ export function Demography() {
           Ringkasan Program & Demografi
         </h2>
         <span className="caption text-muted">
-          Segmentasi siswa aktif berdasarkan kategori profil.
+          Segmentasi siswa ber-NIS berdasarkan kategori profil.
         </span>
       </div>
 
       <div className="stack">
-        {DEMOGRAPHY.map((group) => {
-          const total = group.items.reduce((sum, item) => sum + item.students, 0)
-          return (
-            <div key={group.id} className="stack stack-sm">
-              <span className="label text-muted">{group.title}</span>
+        {groups.map((group) => (
+          <div key={group.title} className="stack stack-sm">
+            <span className="label text-muted">{group.title}</span>
+            {group.items.length === 0 ? (
+              <span className="caption text-muted">Belum ada siswa.</span>
+            ) : (
               <div className="row row-wrap" style={{ gap: 8 }}>
                 {group.items.map((item) => (
-                  <span key={item.label} className="pill">
-                    {item.label}
-                    <span className="caption text-muted tabular">
-                      {item.students} siswa · {ratio(item.students, total)}%
-                    </span>
+                  <span key={item.name} className="pill">
+                    {item.name}
+                    <span className="caption text-muted tabular">{item.count} siswa</span>
                   </span>
                 ))}
               </div>
-            </div>
-          )
-        })}
+            )}
+          </div>
+        ))}
       </div>
     </section>
   )

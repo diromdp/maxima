@@ -1,113 +1,120 @@
 "use client"
 
-import { Search01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Select, TextInput } from "@mantine/core"
 import { useState } from "react"
 
-import { DataTable, type DataColumn } from "@/src/components/data/DataTable"
-import { formatDate } from "@/src/lib/format"
-
-import { ApplicationFormModal } from "./ApplicationFormModal"
+import type { DataColumn } from "@/src/components/data/DataTable"
+import { ListFilter } from "@/src/components/data/ListFilter"
+import { ListSearch } from "@/src/components/data/ListSearch"
+import { applicationsQuery } from "@/src/entities/partner/queries"
 import {
-  type Application,
+  APPLICATION_FILTERS,
   APPLICATION_STATUSES,
-  applicationBadge,
-  APPLICATIONS,
+  applicationFiltersOf,
   FAILED_STATUSES,
-  partnerById,
-  PARTNERS,
-  statusNumber,
-} from "./sample"
+  isFailed,
+  type ApplicationRow,
+} from "@/src/entities/partner/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { DASH, formatDate } from "@/src/lib/format"
+import { useListParams } from "@/src/lib/use-list-params"
 
-export const StatusBadge = ({ status }: { status: Application["status"] }) => (
-  <span className={`badge whitespace-nowrap ${applicationBadge(status)}`}>
-    {statusNumber(status)}. {status}
-  </span>
-)
+import { ApplicationEditModal } from "./ApplicationEditModal"
+import { ApplicationFormModal } from "./ApplicationFormModal"
+import { ReadTable } from "./ReadTable"
+import { STATUS_OPTIONS, StatusBadge } from "./StatusBadge"
+import { usePartnerOptions } from "./use-partner-options"
 
-const COLUMNS: readonly DataColumn<Application>[] = [
-  {
-    key: "studentName",
-    header: "Nama Siswa",
-    sort: (row) => row.studentName,
-    cell: (row) => <span style={{ fontWeight: 600 }}>{row.studentName}</span>,
-  },
-  {
-    key: "partner",
-    header: "Partner",
-    sort: (row) => partnerById(row.partnerId).shortName,
-    cell: (row) => partnerById(row.partnerId).shortName,
-  },
-  { key: "position", header: "Posisi", sort: (row) => row.position, cell: (row) => row.position },
-  {
-    key: "status",
-    header: "Status Progres (11 Status)",
-    sort: (row) => statusNumber(row.status),
-    cell: (row) => <StatusBadge status={row.status} />,
-  },
-  { key: "date", header: "Tanggal", sort: (row) => row.date, cell: (row) => formatDate(row.date) },
-  {
-    key: "partnerNote",
-    header: "Catatan Partner",
-    wrap: true,
-    cell: (row) => <span className="text-muted">{row.partnerNote}</span>,
-  },
-  {
-    key: "admissionNote",
-    header: "Catatan Admission",
-    wrap: true,
-    cell: (row) => row.admissionNote,
-  },
-]
+function columnsFor(
+  readOnly: boolean,
+  onEdit: (application: ApplicationRow) => void,
+): readonly DataColumn<ApplicationRow>[] {
+  return [
+    {
+      key: "student",
+      header: "Nama Siswa",
+      sort: (row) => row.student.name,
+      cell: (row) => <span style={{ fontWeight: 600 }}>{row.student.name}</span>,
+    },
+    {
+      key: "partner",
+      header: "Partner",
+      sort: (row) => row.partner.name,
+      cell: (row) => row.partner.name,
+    },
+    {
+      key: "position",
+      header: "Posisi",
+      sort: (row) => row.position ?? "",
+      cell: (row) => row.position ?? DASH,
+    },
+    {
+      key: "status",
+      header: "Status Progres (11 Status)",
+      sort: (row) => APPLICATION_STATUSES.indexOf(row.status),
+      cell: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: "date",
+      header: "Tanggal",
+      sort: (row) => row.appliedOn,
+      cell: (row) => formatDate(row.appliedOn),
+    },
+    {
+      key: "partnerNote",
+      header: "Catatan Partner",
+      wrap: true,
+      cell: (row) => <span className="text-muted">{row.partnerNote ?? DASH}</span>,
+    },
+    {
+      key: "admissionNote",
+      header: "Catatan Admission",
+      wrap: true,
+      cell: (row) => row.admissionNote ?? DASH,
+    },
+    ...(readOnly
+      ? []
+      : [
+          {
+            key: "actions",
+            header: "Aksi",
+            align: "right",
+            cell: (row) => (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={isFailed(row.status)}
+                title={
+                  isFailed(row.status)
+                    ? "Kegagalan disimpan apa adanya. Buat pengajuan baru bila siswa diajukan lagi."
+                    : undefined
+                }
+                onClick={() => onEdit(row)}
+              >
+                Ubah
+              </button>
+            ),
+          } satisfies DataColumn<ApplicationRow>,
+        ]),
+  ]
+}
 
 export function ApplicationsTab({ readOnly }: { readOnly: boolean }) {
-  const [query, setQuery] = useState("")
-  const [status, setStatus] = useState<string | null>(null)
-  const [partnerId, setPartnerId] = useState<string | null>(null)
+  const { params } = useListParams(APPLICATION_FILTERS)
+  const filters = applicationFiltersOf(params)
+  const applications = useRead(applicationsQuery(filters))
+  const { partners } = usePartnerOptions()
   const [isFormOpen, setIsFormOpen] = useState(false)
-
-  const rows = APPLICATIONS.filter(
-    (row) =>
-      (!status || row.status === status) &&
-      (!partnerId || row.partnerId === partnerId) &&
-      (query === "" || `${row.studentName} ${row.nis}`.toLowerCase().includes(query.toLowerCase())),
-  )
+  const [editing, setEditing] = useState<ApplicationRow | null>(null)
+  const isFiltered = Object.values(filters).some(Boolean)
 
   return (
     <div className="stack">
       <section className="card stack">
         <div className="row row-between row-wrap">
-          <div className="row row-wrap" style={{ gap: 8 }}>
-            <TextInput
-              aria-label="Cari siswa"
-              placeholder="Cari nama atau NIS"
-              size="sm"
-              w={220}
-              leftSection={<HugeiconsIcon icon={Search01Icon} size={16} strokeWidth={1.5} />}
-              value={query}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-            />
-            <Select
-              aria-label="Saring status"
-              placeholder="Status: Semua"
-              size="sm"
-              w={240}
-              data={[...APPLICATION_STATUSES]}
-              value={status}
-              onChange={setStatus}
-              clearable
-            />
-            <Select
-              aria-label="Saring partner"
-              placeholder="Partner: Semua"
-              size="sm"
-              w={200}
-              data={PARTNERS.map((partner) => ({ value: partner.id, label: partner.shortName }))}
-              value={partnerId}
-              onChange={setPartnerId}
-              clearable
-            />
+          <div className="row row-wrap" style={{ gap: 8, flex: 1 }}>
+            <ListSearch label="Cari nama, NIS, atau partner" />
+            <ListFilter name="status" label="Status" options={STATUS_OPTIONS} />
+            <ListFilter name="partnerId" label="Partner" options={partners} />
           </div>
           {!readOnly && (
             <button type="button" className="btn btn-primary" onClick={() => setIsFormOpen(true)}>
@@ -121,20 +128,23 @@ export function ApplicationsTab({ readOnly }: { readOnly: boolean }) {
           Kedua kolom catatan internal, tidak tampil di portal siswa.
         </span>
 
-        <DataTable
-          rows={rows}
-          columns={COLUMNS}
-          rowKey={(row) => row.id}
+        <ReadTable
+          read={applications}
+          columns={columnsFor(readOnly, setEditing)}
           defaultSort={{ key: "date", dir: "desc" }}
-          emptyText="Tidak ada pengajuan yang cocok dengan saringan."
+          emptyText={
+            isFiltered
+              ? "Tidak ada pengajuan yang cocok dengan saringan."
+              : "Belum ada pengajuan ke partner. Tambahkan lewat tombol Tambah Pengajuan."
+          }
         />
       </section>
 
       <section className="card stack stack-sm">
         <span className="label">Panduan 11 Status Progres (untuk referensi Admission)</span>
         <div className="row row-wrap" style={{ gap: 8 }}>
-          {APPLICATION_STATUSES.map((candidate) => (
-            <StatusBadge key={candidate} status={candidate} />
+          {APPLICATION_STATUSES.map((status) => (
+            <StatusBadge key={status} status={status} />
           ))}
         </div>
         <span className="caption text-muted">
@@ -144,11 +154,8 @@ export function ApplicationsTab({ readOnly }: { readOnly: boolean }) {
         </span>
       </section>
 
-      <ApplicationFormModal
-        key={String(isFormOpen)}
-        opened={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-      />
+      {isFormOpen && <ApplicationFormModal onClose={() => setIsFormOpen(false)} />}
+      {editing && <ApplicationEditModal application={editing} onClose={() => setEditing(null)} />}
     </div>
   )
 }

@@ -2,21 +2,13 @@
 
 import Link from "next/link"
 
+import type { OverdueReport } from "@/src/entities/report/schema"
 import { formatDate } from "@/src/lib/format"
-import { formatMoney } from "@/src/lib/money"
+import { formatMoney, idr } from "@/src/lib/money"
 
-import { type DebtRow, debtTotal } from "./sample"
-
-export function DebtCard({
-  rows,
-  until,
-  label,
-}: {
-  rows: readonly DebtRow[]
-  until: string
-  label: string
-}) {
-  const sorted = [...rows].sort((a, b) => b.dueIdr.amount - a.dueIdr.amount)
+export function DebtCard({ overdue, label }: { overdue: OverdueReport; label: string }) {
+  const { asOf, rows } = overdue
+  const until = asOf ? formatDate(asOf) : null
 
   return (
     <section className="card stack">
@@ -24,14 +16,14 @@ export function DebtCard({
         <div className="stack" style={{ gap: 2 }}>
           <h2 className="h6">Piutang Belum Dibayar per Siswa</h2>
           <span className="caption text-muted">
-            Cicilan yang sudah jatuh tempo tetapi belum dibayar sampai {formatDate(until)} ({label}
-            ). Angka yang sama dengan Neraca Keuangan di Beranda; hanya Rupiah karena Euro tanpa
-            jadwal.
+            {until
+              ? `Cicilan yang sudah jatuh tempo tetapi belum dibayar sampai ${until} (${label}). Angka yang sama dengan Neraca Keuangan di Beranda; hanya Rupiah karena Euro tanpa jadwal.`
+              : `Periode ${label} belum berjalan, jadi belum ada cicilan yang jatuh tempo.`}
           </span>
         </div>
         <div className="stack" style={{ gap: 0, alignItems: "flex-end" }}>
-          <span className="h5 tabular text-danger">{formatMoney(debtTotal(rows))}</span>
-          <span className="caption text-muted">{rows.length} siswa tertunggak</span>
+          <span className="h5 tabular text-danger">{formatMoney(idr(overdue.totalIdr))}</span>
+          <span className="caption text-muted">{overdue.studentCount} siswa tertunggak</span>
         </div>
       </div>
 
@@ -48,36 +40,37 @@ export function DebtCard({
                 <th>Paket</th>
                 <th>Cabang</th>
                 <th>PIC</th>
-                <th className="numeric">Target sampai {formatDate(until)}</th>
-                <th className="numeric">Dibayar sampai {formatDate(until)}</th>
+                <th className="numeric">Target sampai {until}</th>
+                <th className="numeric">Dibayar sampai {until}</th>
                 <th className="numeric">Piutang (Rp)</th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((row) => (
-                <tr key={row.receivable.student.nis}>
+              {rows.map((row) => (
+                <tr key={row.contractId}>
                   <td>
                     <div className="stack" style={{ gap: 0 }}>
-                      <Link
-                        className="link"
-                        href={`/staff/students/${row.receivable.student.nis}?tab=finance`}
-                      >
-                        {row.receivable.student.name}
+                      <Link className="link" href={`/staff/students/${row.nis}?tab=finance`}>
+                        {row.name}
                       </Link>
-                      <span className="caption text-muted">{row.receivable.student.nis}</span>
+                      <span className="caption text-muted">{row.nis}</span>
                     </div>
                   </td>
-                  <td>{row.receivable.pkg.name}</td>
-                  <td>{row.receivable.student.branch}</td>
-                  <td>{row.receivable.student.pic}</td>
-                  <td className="numeric tabular">{formatMoney(row.targetIdr)}</td>
-                  <td className="numeric tabular text-success">{formatMoney(row.paidIdr)}</td>
-                  <td className="numeric tabular text-danger">{formatMoney(row.dueIdr)}</td>
+                  <td>{row.package.name}</td>
+                  <td>{row.branch?.name ?? <span className="text-faint">Tanpa cabang</span>}</td>
+                  <td>{row.pic?.name ?? <span className="text-faint">Tanpa PIC</span>}</td>
+                  <td className="numeric tabular">{formatMoney(idr(row.targetIdr))}</td>
+                  <td className="numeric tabular text-success">{formatMoney(idr(row.paidIdr))}</td>
+                  <td className="numeric tabular text-danger">
+                    {formatMoney(idr(row.overdueIdr))}
+                  </td>
                 </tr>
               ))}
               <tr style={{ fontWeight: 700 }}>
                 <td colSpan={6}>Total piutang belum dibayar</td>
-                <td className="numeric tabular text-danger">{formatMoney(debtTotal(rows))}</td>
+                <td className="numeric tabular text-danger">
+                  {formatMoney(idr(overdue.totalIdr))}
+                </td>
               </tr>
             </tbody>
           </table>

@@ -1,18 +1,18 @@
 "use client"
 
-import { notify } from "@/src/lib/notify"
-
 export function SaveBar({
   dirtyCount,
   unit,
   label,
   readOnly,
+  isPending,
   onSave,
 }: {
   dirtyCount: number
   unit: string
   label: string
   readOnly: boolean
+  isPending: boolean
   onSave: () => void
 }) {
   if (readOnly) return null
@@ -25,14 +25,11 @@ export function SaveBar({
       <button
         type="button"
         className="btn btn-primary"
-        disabled={dirtyCount === 0}
+        disabled={dirtyCount === 0 || isPending}
         title={dirtyCount === 0 ? "Belum ada yang berubah" : undefined}
-        onClick={() => {
-          onSave()
-          notify.success(`${label} tersimpan.`)
-        }}
+        onClick={onSave}
       >
-        {label}
+        {isPending ? "Menyimpan..." : label}
       </button>
     </div>
   )

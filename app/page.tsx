@@ -30,8 +30,8 @@ export default async function StudentLoginPage({
           <LoginForm
             kind="student"
             next={next}
-            identityLabel="NIS atau Email"
-            identityPlaceholder="20250233"
+            identityLabel="Email"
+            identityPlaceholder="nama@email.com"
           />
 
           <Text size="sm" c="dimmed">

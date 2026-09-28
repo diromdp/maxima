@@ -1,26 +1,44 @@
 "use client"
 
 import { Notice } from "@/src/components/ui/Notice"
+import { saveScoreSheet } from "@/src/entities/assessment/actions"
+import {
+  type AssessmentSheet,
+  averageOf,
+  formatScore,
+  isBelowKkm,
+  type SheetKey,
+  isFormerMember,
+} from "@/src/entities/assessment/schema"
 
+import { KkmMissingNotice } from "./KkmMissingNotice"
 import { SaveBar } from "./SaveBar"
 import { ScoreCell } from "./ScoreCell"
-import {
-  type AssessmentClass,
-  average,
-  CHAPTER_KEYS,
-  CHAPTER_SCORES,
-  formatScore,
-  KKM,
-  type Student,
-  STUDENTS_BY_CLASS,
-} from "./sample"
-import { useScoreSheet } from "./useScoreSheet"
+import { useSheetDraft } from "./useSheetDraft"
+import { SheetStudentName } from "./SheetStudentName"
 
-export function ChapterScoresTab({ room, readOnly }: { room: AssessmentClass; readOnly: boolean }) {
-  const students: readonly Student[] = STUDENTS_BY_CLASS[room.id] ?? []
-  const { scoreOf, isDirty, setScore, dirtyCount, save } = useScoreSheet(
-    CHAPTER_SCORES[room.id] ?? {},
-  )
+export function ChapterScoresTab({
+  sheet,
+  sheetKey,
+  readOnly,
+}: {
+  sheet: AssessmentSheet
+  sheetKey: SheetKey
+  readOnly: boolean
+}) {
+  const { kkm, chapterKeys, students } = sheet
+  const draft = useSheetDraft<number>({
+    sheetKey,
+    serverValueOf: (studentId, key) =>
+      students.find((student) => student.studentId === studentId)?.chapters[key] ?? null,
+    save: (changes) =>
+      saveScoreSheet("chapters", {
+        ...sheetKey,
+        version: sheet.versions.chapters,
+        rows: Object.entries(changes).map(([studentId, values]) => ({ studentId, values })),
+      }),
+    successMessage: "Nilai Kapitel tersimpan.",
+  })
 
   return (
     <div className="stack">
@@ -31,7 +49,7 @@ export function ChapterScoresTab({ room, readOnly }: { room: AssessmentClass; re
               <tr>
                 <th>Nama Siswa</th>
                 <th>Level</th>
-                {CHAPTER_KEYS.map((key) => (
+                {chapterKeys.map((key) => (
                   <th key={key} style={{ textAlign: "right" }}>
                     {key}
                   </th>
@@ -42,29 +60,34 @@ export function ChapterScoresTab({ room, readOnly }: { room: AssessmentClass; re
             </thead>
             <tbody>
               {students.map((student) => {
-                const rowAverage = average(CHAPTER_KEYS.map((key) => scoreOf(student.nis, key)))
+                const rowAverage = draft.isRowDirty(student.studentId)
+                  ? averageOf(chapterKeys.map((key) => draft.valueOf(student.studentId, key)))
+                  : student.chapterAverage
                 return (
-                  <tr key={student.nis}>
-                    <td style={{ fontWeight: 600 }}>{student.name}</td>
-                    <td className="text-muted">{room.level}</td>
-                    {CHAPTER_KEYS.map((key) => (
+                  <tr key={student.studentId}>
+                    <td style={{ fontWeight: 600 }}>
+                      <SheetStudentName student={student} />
+                    </td>
+                    <td className="text-muted">{sheet.class.level.name}</td>
+                    {chapterKeys.map((key) => (
                       <td key={key} className="numeric" style={{ padding: "6px 4px" }}>
                         <ScoreCell
-                          value={scoreOf(student.nis, key)}
-                          isDirty={isDirty(student.nis, key)}
-                          readOnly={readOnly}
+                          value={draft.valueOf(student.studentId, key)}
+                          kkm={kkm}
+                          isDirty={draft.isDirty(student.studentId, key)}
+                          readOnly={readOnly || isFormerMember(student)}
                           label={`${key} ${student.name}`}
-                          onChange={(value) => setScore(student.nis, key, value)}
+                          onChange={(value) => draft.setValue(student.studentId, key, value)}
                         />
                       </td>
                     ))}
                     <td
-                      className={`numeric ${rowAverage !== null && rowAverage < KKM ? "text-danger" : ""}`}
+                      className={`numeric ${isBelowKkm(rowAverage, kkm) ? "text-danger" : ""}`}
                       style={{ fontWeight: 700 }}
                     >
                       {formatScore(rowAverage)}
                     </td>
-                    <td className="numeric text-muted">{KKM}</td>
+                    <td className="numeric text-muted">{kkm ?? "-"}</td>
                   </tr>
                 )
               })}
@@ -72,19 +95,24 @@ export function ChapterScoresTab({ room, readOnly }: { room: AssessmentClass; re
           </table>
         </div>
 
-        <Notice tone="warning" title="Aturan Sistem">
-          KKM yang ditetapkan adalah <strong>{KKM}</strong>. Semua kolom bab (Kapitel 1-12)
-          digabungkan dalam satu tabel berdasar level terpilih. Empat level dalam satu tabel dengan
-          kolom level, bukan empat sheet terpisah.
-        </Notice>
+        {kkm === null ? (
+          <KkmMissingNotice />
+        ) : (
+          <Notice tone="warning" title="Aturan Sistem">
+            KKM yang ditetapkan adalah <strong>{kkm}</strong>. Semua kolom bab (Kapitel 1-12)
+            digabungkan dalam satu tabel berdasar level terpilih. Empat level dalam satu tabel
+            dengan kolom level, bukan empat sheet terpisah.
+          </Notice>
+        )}
       </section>
 
       <SaveBar
-        dirtyCount={dirtyCount}
+        dirtyCount={draft.dirtyCount}
         unit="nilai"
         label="Simpan Nilai Kapitel"
         readOnly={readOnly}
-        onSave={save}
+        isPending={draft.isPending}
+        onSave={() => void draft.submit()}
       />
     </div>
   )

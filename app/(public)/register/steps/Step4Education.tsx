@@ -29,7 +29,7 @@ export function Step4Education({ form }: { form: UseFormReturnType<RegistrationV
           label="Jurusan"
           withAsterisk
           placeholder="Contoh: Keperawatan"
-          {...form.getInputProps("major")}
+          {...form.getInputProps("schoolMajor")}
         />
       </GridCol>
       <GridCol span={{ base: 12, sm: 6 }}>

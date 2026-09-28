@@ -1,76 +1,119 @@
 "use client"
 
-import { useState } from "react"
-import { Checkbox, FileInput, Stack, Textarea } from "@mantine/core"
+import { Checkbox, FileInput, Skeleton, Stack, Textarea } from "@mantine/core"
 import { DateInput, DatesProvider } from "@mantine/dates"
-import { notify } from "@/src/lib/notify"
+import { schemaResolver, useForm } from "@mantine/form"
 import { Calendar03Icon, Upload04Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import dayjs from "dayjs"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
 
+import { QueryError } from "@/src/components/data/QueryError"
+import { Notice } from "@/src/components/ui/Notice"
+import { presignLeaveEvidence, submitLeave } from "@/src/entities/leave/actions"
+import { ownLeavesQuery } from "@/src/entities/leave/queries"
+import {
+  latestReturnDate,
+  type LeaveDetail,
+  leaveMonths,
+  leaveRequestFormSchema,
+  MAX_LEAVE_MONTHS,
+  type OwnLeaves,
+  positionLabel,
+} from "@/src/entities/leave/schema"
+import { type ActionResult, failureOf } from "@/src/lib/api/errors"
+import { useRead } from "@/src/lib/api/use-read"
+import type { PortalStatus } from "@/src/lib/auth/session"
 import { formatDateLong, formatFileSize } from "@/src/lib/format"
+import {
+  isUploadable,
+  putToStorage,
+  UPLOAD_ACCEPT,
+  UPLOAD_FAILED,
+  UPLOAD_RULE,
+} from "@/src/lib/upload"
+import { useActionForm } from "@/src/lib/use-action-form"
 
 import { CardHeader } from "./CardHeader"
-import { DRAFT, MAX_MONTHS, monthsBetween, STUDENT, TERMS } from "./leave"
+import { applyBlockOf, earliestLeaveStart, TERMS } from "./leave"
 
-const UPLOAD_MAX_BYTES = 5 * 1024 * 1024
-const UPLOAD_RULE = `PDF, PNG, atau JPG. Maksimal ${formatFileSize(UPLOAD_MAX_BYTES)}.`
-const EARLIEST_START = dayjs().add(1, "month").startOf("day").toDate()
+const EVIDENCE_FIELD = "evidenceId"
+const TERMS_FIELD = "agreedTerms"
 
-function toIsoDate(value: unknown): string | null {
-  if (!value) return null
-  const date = new Date(value as string)
-  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+type LeaveFormValues = {
+  startsOn: string | null
+  returnsOn: string | null
+  reason: string
+  agreedTerms: string[]
 }
 
-function calendarIcon() {
-  return <HugeiconsIcon icon={Calendar03Icon} size={16} strokeWidth={1.5} />
+const calendarIcon = <HugeiconsIcon icon={Calendar03Icon} size={16} strokeWidth={1.5} />
+
+async function uploadEvidence(file: File): Promise<ActionResult<string>> {
+  if (!isUploadable(file)) return failureOf(UPLOAD_RULE, EVIDENCE_FIELD)
+  const presigned = await presignLeaveEvidence(file.type, file.size)
+  if (!presigned.ok) return presigned
+  if (!(await putToStorage(presigned.data, file))) return failureOf(UPLOAD_FAILED, EVIDENCE_FIELD)
+  return { ok: true, data: presigned.data.evidenceId }
 }
 
-export function LeaveForm() {
-  const [start, setStart] = useState<string | null>(DRAFT.start)
-  const [end, setEnd] = useState<string | null>(DRAFT.end)
-  const [reason, setReason] = useState<string>(DRAFT.reason)
-  const [supportDocument, setSupportDocument] = useState<File | null>(null)
-  const [agreed, setAgreed] = useState<string[]>([])
+function RequestForm({ history, status }: { history: OwnLeaves; status: PortalStatus }) {
+  const router = useRouter()
+  const [evidence, setEvidence] = useState<File | null>(null)
+  const earliest = earliestLeaveStart()
+  const block = applyBlockOf(history.data, status)
+  const resolveSchema = schemaResolver(leaveRequestFormSchema, { sync: true })
 
-  const months = start && end ? monthsBetween(start, end) : null
-  const durationValid = months !== null && months > 0 && months <= MAX_MONTHS
-  const durationError =
-    months === null || durationValid
-      ? null
-      : months <= 0
-        ? "Tanggal masuk kembali harus setelah tanggal mulai cuti."
-        : `Durasi cuti maksimal ${MAX_MONTHS} bulan.`
+  const form = useForm<LeaveFormValues>({
+    initialValues: { startsOn: null, returnsOn: null, reason: "", agreedTerms: [] },
+    validate: (values) => ({
+      ...resolveSchema(values),
+      ...(values.startsOn && values.startsOn < earliest
+        ? { startsOn: `Tanggal mulai paling cepat ${formatDateLong(earliest)}.` }
+        : {}),
+      ...(values.agreedTerms.length === TERMS.length
+        ? {}
+        : { [TERMS_FIELD]: "Centang seluruh ketentuan sebelum mengirim." }),
+      ...(evidence ? {} : { [EVIDENCE_FIELD]: "Unggah dokumen pendukung lebih dulu." }),
+    }),
+  })
 
-  const missing = [
-    durationValid ? null : "lengkapi tanggal cuti",
-    reason.trim() ? null : "isi alasan cuti",
-    supportDocument ? null : "unggah dokumen pendukung",
-    agreed.length === TERMS.length ? null : "centang seluruh ketentuan",
-  ].filter((item): item is string => item !== null)
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: async (values): Promise<ActionResult<LeaveDetail>> => {
+      if (!evidence) return failureOf("Unggah dokumen pendukung lebih dulu.", EVIDENCE_FIELD)
+      const uploaded = await uploadEvidence(evidence)
+      if (!uploaded.ok) return uploaded
+      return submitLeave(leaveRequestFormSchema.parse(values), uploaded.data)
+    },
+    successMessage: "Pengajuan cuti terkirim. Finance memverifikasinya lebih dulu.",
+    invalidates: [["leaves", "me"]],
+    onSuccess: (leave) => router.push(`/portal/leave/${leave.id}`),
+  })
+
+  const { startsOn, returnsOn } = form.values
+  const months =
+    startsOn && returnsOn && returnsOn > startsOn ? leaveMonths(startsOn, returnsOn) : null
+  const { name, position } = history.form
 
   return (
-    <form
-      className="stack stack-lg"
-      onSubmit={(event) => {
-        event.preventDefault()
-        notify.success("Pengajuan cuti terkirim. Finance memverifikasinya lebih dulu.")
-      }}
-    >
+    <form className="stack stack-lg" onSubmit={submit} noValidate>
+      {block && <Notice tone="warning">{block}</Notice>}
+      {formError && <Notice tone="danger">{formError}</Notice>}
+
       <section className="card stack">
         <CardHeader title="Formulir Pengajuan" note="wajib lengkap sebelum dikirim" />
 
         <dl className="grid-3" style={{ margin: 0 }}>
           {(
             [
-              ["Nama Lengkap", STUDENT.name],
-              ["Kelas Saat Ini", STUDENT.className],
-              ["Level dan Kapitel Terakhir", STUDENT.position],
+              ["Nama Lengkap", name],
+              ["Kelas Saat Ini", position.className ?? "Belum tercatat"],
+              ["Level dan Kapitel Terakhir", positionLabel(position)],
             ] as const
-          ).map(([name, value]) => (
-            <div key={name} className="stack" style={{ gap: 2 }}>
-              <dt className="spec-name">{name}</dt>
+          ).map(([label, value]) => (
+            <div key={label} className="stack" style={{ gap: 2 }}>
+              <dt className="spec-name">{label}</dt>
               <dd className="body-sm" style={{ margin: 0, fontWeight: 600 }}>
                 {value}
               </dd>
@@ -83,26 +126,24 @@ export function LeaveForm() {
             <div className="grid-2">
               <DateInput
                 label="Tanggal Mulai Cuti"
-                description={`Paling cepat ${formatDateLong(EARLIEST_START)}, satu bulan dari hari ini.`}
+                description={`Paling cepat ${formatDateLong(earliest)}, satu bulan dari hari ini.`}
                 placeholder="Pilih tanggal"
                 valueFormat="DD MMM YYYY"
-                minDate={EARLIEST_START}
-                clearable
-                leftSection={calendarIcon()}
-                value={start ? new Date(start) : null}
-                onChange={(value) => setStart(toIsoDate(value))}
+                minDate={earliest}
+                leftSection={calendarIcon}
+                withAsterisk
+                {...form.getInputProps("startsOn")}
               />
               <DateInput
                 label="Tanggal Rencana Masuk Kembali"
-                description={`Paling lama ${MAX_MONTHS} bulan setelah tanggal mulai.`}
+                description={`Paling lama ${MAX_LEAVE_MONTHS} bulan setelah tanggal mulai.`}
                 placeholder="Pilih tanggal"
                 valueFormat="DD MMM YYYY"
-                minDate={start ? new Date(start) : EARLIEST_START}
-                clearable
-                leftSection={calendarIcon()}
-                value={end ? new Date(end) : null}
-                onChange={(value) => setEnd(toIsoDate(value))}
-                error={durationError}
+                minDate={startsOn ?? earliest}
+                maxDate={startsOn ? latestReturnDate(startsOn) : undefined}
+                leftSection={calendarIcon}
+                withAsterisk
+                {...form.getInputProps("returnsOn")}
               />
             </div>
           </DatesProvider>
@@ -110,10 +151,10 @@ export function LeaveForm() {
           <div className="row-soft">
             <span className="spec-name">Masa Cuti</span>
             <span
-              className={`body-sm${durationValid ? "" : " text-muted"}`}
+              className={`body-sm${months === null ? " text-muted" : ""}`}
               style={{ fontWeight: 600 }}
             >
-              {durationValid ? `${months} bulan` : "Belum dapat dihitung"}
+              {months === null ? "Belum dapat dihitung" : `${months} bulan`}
             </span>
           </div>
 
@@ -123,23 +164,25 @@ export function LeaveForm() {
             placeholder="Contoh: mendampingi orang tua yang sedang dirawat di luar kota"
             autosize
             minRows={4}
-            value={reason}
-            onChange={(event) => setReason(event.currentTarget.value)}
+            withAsterisk
+            {...form.getInputProps("reason")}
           />
 
           <FileInput
             label="Dokumen Pendukung"
             description={
-              supportDocument
-                ? `${supportDocument.name} · ${formatFileSize(supportDocument.size)}`
+              evidence
+                ? `${evidence.name} · ${formatFileSize(evidence.size)}`
                 : `Surat keterangan yang menguatkan alasan Anda. ${UPLOAD_RULE}`
             }
             placeholder="Pilih berkas"
             leftSection={<HugeiconsIcon icon={Upload04Icon} size={16} strokeWidth={1.5} />}
             clearable
-            accept="application/pdf,image/png,image/jpeg"
-            value={supportDocument}
-            onChange={setSupportDocument}
+            withAsterisk
+            accept={UPLOAD_ACCEPT}
+            value={evidence}
+            onChange={setEvidence}
+            error={form.errors[EVIDENCE_FIELD]}
           />
         </Stack>
       </section>
@@ -147,10 +190,10 @@ export function LeaveForm() {
       <section className="card stack">
         <CardHeader
           title="Ketentuan"
-          note={`${agreed.length} dari ${TERMS.length} dicentang, wajib semua`}
+          note={`${form.values.agreedTerms.length} dari ${TERMS.length} dicentang, wajib semua`}
         />
 
-        <Checkbox.Group value={agreed} onChange={setAgreed}>
+        <Checkbox.Group {...form.getInputProps(TERMS_FIELD)}>
           <div className="list-rows">
             {TERMS.map((term) => (
               <Checkbox key={term} value={term} label={term} />
@@ -161,14 +204,39 @@ export function LeaveForm() {
 
       <div className="row row-between row-wrap" style={{ gap: 12 }}>
         <span className="caption text-muted" aria-live="polite">
-          {missing.length > 0
-            ? `Sebelum mengirim: ${missing.join(", ")}.`
-            : "Semua lengkap. Pengajuan masuk ke Finance begitu dikirim."}
+          Pengajuan masuk ke Finance begitu dikirim.
         </span>
-        <button type="submit" className="btn btn-primary" disabled={missing.length > 0}>
-          Kirim Pengajuan
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={isPending || block !== null}
+          title={block ?? undefined}
+        >
+          {isPending ? "Mengirim..." : "Kirim Pengajuan"}
         </button>
       </div>
     </form>
+  )
+}
+
+export function LeaveForm({ status }: { status: PortalStatus }) {
+  const history = useRead(ownLeavesQuery())
+
+  if (history.isError) {
+    return <QueryError message={history.error.message} onRetry={() => void history.refetch()} />
+  }
+  if (history.isPending) return <LeaveFormSkeleton />
+  return <RequestForm history={history.data} status={status} />
+}
+
+export function LeaveFormSkeleton() {
+  return (
+    <div className="stack stack-lg" aria-busy="true">
+      <span className="sr-only" role="status">
+        Memuat
+      </span>
+      <Skeleton height={520} radius="md" aria-hidden />
+      <Skeleton height={320} radius="md" aria-hidden />
+    </div>
   )
 }

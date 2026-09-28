@@ -1,63 +1,88 @@
 "use client"
 
-import { Search01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Select, TextInput } from "@mantine/core"
+import { Skeleton } from "@mantine/core"
 import { Fragment, useState } from "react"
 
-import { formatDate } from "@/src/lib/format"
+import { ListFilter } from "@/src/components/data/ListFilter"
+import { ListSearch } from "@/src/components/data/ListSearch"
+import { QueryError } from "@/src/components/data/QueryError"
+import { SkeletonRows } from "@/src/components/data/SkeletonRows"
+import { applicationsQuery, trackingQuery } from "@/src/entities/partner/queries"
+import {
+  APPLICATION_FILTERS,
+  applicationFiltersOf,
+  type TrackingRow,
+} from "@/src/entities/partner/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { DASH, formatDate } from "@/src/lib/format"
+import { useListParams } from "@/src/lib/use-list-params"
 
-import { StatusBadge } from "./ApplicationsTab"
-import { APPLICATION_STATUSES, APPLICATIONS, partnerById, PARTNERS, trackingRows } from "./sample"
+import { STATUS_OPTIONS, StatusBadge } from "./StatusBadge"
+import { usePartnerOptions } from "./use-partner-options"
+
+const COLUMN_COUNT = 7
+const SKELETON_ROWS = 6
+
+function HistoryPanel({ row }: { row: TrackingRow }) {
+  const history = useRead(applicationsQuery({ studentId: row.student.id }))
+
+  return (
+    <div className="card-soft stack stack-sm">
+      <span className="label">Riwayat pengajuan {row.student.name}</span>
+      {history.isError ? (
+        <QueryError message={history.error.message} onRetry={() => void history.refetch()} />
+      ) : history.isPending ? (
+        <div className="stack stack-sm" aria-busy="true">
+          <span className="sr-only" role="status">
+            Memuat
+          </span>
+          {Array.from({ length: row.applicationCount }, (_, index) => (
+            <Skeleton key={index} height={20} radius="xl" aria-hidden />
+          ))}
+        </div>
+      ) : (
+        history.data.data.map((application) => (
+          <div
+            key={application.id}
+            className="row row-wrap"
+            style={{ gap: 12, alignItems: "flex-start" }}
+          >
+            <span className="caption text-muted tabular" style={{ minWidth: 90 }}>
+              {formatDate(application.appliedOn)}
+            </span>
+            <span className="body-sm" style={{ minWidth: 140 }}>
+              {application.partner.name} · {application.position ?? DASH}
+            </span>
+            <StatusBadge status={application.status} />
+            {application.partnerNote && (
+              <span className="caption text-muted">{application.partnerNote}</span>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
 
 export function TrackingTab() {
-  const [query, setQuery] = useState("")
-  const [status, setStatus] = useState<string | null>(null)
-  const [partnerId, setPartnerId] = useState<string | null>(null)
-  const [openNis, setOpenNis] = useState<string | null>(null)
-
-  const rows = trackingRows(APPLICATIONS).filter(
-    (row) =>
-      (!status || row.latest.status === status) &&
-      (!partnerId || row.latest.partnerId === partnerId) &&
-      (query === "" || `${row.studentName} ${row.nis}`.toLowerCase().includes(query.toLowerCase())),
-  )
+  const { params } = useListParams(APPLICATION_FILTERS)
+  const filters = applicationFiltersOf(params)
+  const tracking = useRead(trackingQuery(filters))
+  const { partners } = usePartnerOptions()
+  const [openStudentId, setOpenStudentId] = useState<string | null>(null)
+  const isFiltered = Object.values(filters).some(Boolean)
 
   return (
     <section className="card stack">
       <div className="row row-between row-wrap">
-        <div className="row row-wrap" style={{ gap: 8 }}>
-          <TextInput
-            aria-label="Cari siswa"
-            placeholder="Cari nama siswa"
-            size="sm"
-            w={220}
-            leftSection={<HugeiconsIcon icon={Search01Icon} size={16} strokeWidth={1.5} />}
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
-          <Select
-            aria-label="Saring status"
-            placeholder="Status: Semua"
-            size="sm"
-            w={240}
-            data={[...APPLICATION_STATUSES]}
-            value={status}
-            onChange={setStatus}
-            clearable
-          />
-          <Select
-            aria-label="Saring partner"
-            placeholder="Partner: Semua"
-            size="sm"
-            w={200}
-            data={PARTNERS.map((partner) => ({ value: partner.id, label: partner.shortName }))}
-            value={partnerId}
-            onChange={setPartnerId}
-            clearable
-          />
+        <div className="row row-wrap" style={{ gap: 8, flex: 1 }}>
+          <ListSearch label="Cari nama atau NIS" />
+          <ListFilter name="status" label="Status" options={STATUS_OPTIONS} />
+          <ListFilter name="partnerId" label="Partner" options={partners} />
         </div>
-        <span className="badge badge-neutral tabular">{rows.length} siswa</span>
+        {tracking.isSuccess && (
+          <span className="badge badge-neutral tabular">{tracking.data.data.length} siswa</span>
+        )}
       </div>
 
       <span className="caption text-muted">
@@ -66,83 +91,73 @@ export function TrackingTab() {
         di sini.
       </span>
 
-      <div className="table-scroll">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Nama Siswa</th>
-              <th>Partner</th>
-              <th>Posisi</th>
-              <th>Status Progres (11 Status)</th>
-              <th>Tanggal Lapor</th>
-              <th>PIC Admission</th>
-              <th style={{ textAlign: "right" }}>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
+      {tracking.isError ? (
+        <QueryError message={tracking.error.message} onRetry={() => void tracking.refetch()} />
+      ) : (
+        <div className="table-scroll" aria-busy={tracking.isPending}>
+          <table className="table">
+            <thead>
               <tr>
-                <td colSpan={7} className="text-muted">
-                  Tidak ada siswa yang cocok dengan saringan.
-                </td>
+                <th>Nama Siswa</th>
+                <th>Partner</th>
+                <th>Posisi</th>
+                <th>Status Progres (11 Status)</th>
+                <th>Tanggal Lapor</th>
+                <th>PIC Admission</th>
+                <th style={{ textAlign: "right" }}>Aksi</th>
               </tr>
-            )}
-            {rows.map((row) => {
-              const isOpen = openNis === row.nis
-              return (
-                <Fragment key={row.nis}>
-                  <tr>
-                    <td style={{ fontWeight: 600 }}>{row.studentName}</td>
-                    <td>{partnerById(row.latest.partnerId).shortName}</td>
-                    <td>{row.latest.position}</td>
-                    <td>
-                      <StatusBadge status={row.latest.status} />
-                    </td>
-                    <td>{formatDate(row.latest.date)}</td>
-                    <td>{row.latest.admissionPic}</td>
-                    <td style={{ textAlign: "right" }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        aria-expanded={isOpen}
-                        onClick={() => setOpenNis(isOpen ? null : row.nis)}
-                      >
-                        {isOpen ? "Tutup" : `Lihat (${row.history.length})`}
-                      </button>
-                    </td>
-                  </tr>
-                  {isOpen && (
-                    <tr>
-                      <td colSpan={7} className="wrap" style={{ paddingTop: 0 }}>
-                        <div className="card-soft stack stack-sm">
-                          <span className="label">Riwayat pengajuan {row.studentName}</span>
-                          {row.history.map((application) => (
-                            <div
-                              key={application.id}
-                              className="row row-wrap"
-                              style={{ gap: 12, alignItems: "flex-start" }}
-                            >
-                              <span className="caption text-muted tabular" style={{ minWidth: 90 }}>
-                                {formatDate(application.date)}
-                              </span>
-                              <span className="body-sm" style={{ minWidth: 140 }}>
-                                {partnerById(application.partnerId).shortName} ·{" "}
-                                {application.position}
-                              </span>
-                              <StatusBadge status={application.status} />
-                              <span className="caption text-muted">{application.partnerNote}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {tracking.isPending ? (
+                <SkeletonRows columns={COLUMN_COUNT} rows={SKELETON_ROWS} />
+              ) : tracking.data.data.length === 0 ? (
+                <tr>
+                  <td colSpan={COLUMN_COUNT} className="text-muted">
+                    {isFiltered
+                      ? "Tidak ada siswa yang cocok dengan saringan."
+                      : "Belum ada siswa yang diajukan ke partner."}
+                  </td>
+                </tr>
+              ) : (
+                tracking.data.data.map((row) => {
+                  const isOpen = openStudentId === row.student.id
+                  return (
+                    <Fragment key={row.student.id}>
+                      <tr>
+                        <td style={{ fontWeight: 600 }}>{row.student.name}</td>
+                        <td>{row.partner.name}</td>
+                        <td>{row.position ?? DASH}</td>
+                        <td>
+                          <StatusBadge status={row.status} />
+                        </td>
+                        <td>{formatDate(row.reportedAt)}</td>
+                        <td>{row.pic?.name ?? DASH}</td>
+                        <td style={{ textAlign: "right" }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            aria-expanded={isOpen}
+                            onClick={() => setOpenStudentId(isOpen ? null : row.student.id)}
+                          >
+                            {isOpen ? "Tutup" : `Lihat (${row.applicationCount})`}
+                          </button>
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr>
+                          <td colSpan={COLUMN_COUNT} className="wrap" style={{ paddingTop: 0 }}>
+                            <HistoryPanel row={row} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   )
 }

@@ -1,6 +1,9 @@
 import { Skeleton } from "@mantine/core"
 
-import { STUDENTS } from "./sample"
+import { TableSkeleton } from "@/src/components/data/TableSkeleton"
+
+const INDEX_COLUMNS = 8
+const FILTER_WIDTHS = [180, 160, 170] as const
 
 export default function Loading() {
   return (
@@ -18,20 +21,19 @@ export default function Loading() {
         <div className="row row-between row-wrap">
           <Skeleton height={36} width={260} radius="xl" />
           <div className="row row-wrap" style={{ gap: 8 }}>
-            <Skeleton height={36} width={180} radius="xl" />
-            <Skeleton height={36} width={160} radius="xl" />
-            <Skeleton height={36} width={170} radius="xl" />
+            {FILTER_WIDTHS.map((width, index) => (
+              <Skeleton key={index} height={36} width={width} radius="xl" />
+            ))}
           </div>
         </div>
       </section>
 
       <section className="card stack" aria-hidden>
-        <Skeleton height={20} width="30%" radius="xl" />
-        <div className="stack stack-sm">
-          {STUDENTS.map((student) => (
-            <Skeleton key={student.nis} height={52} radius="sm" />
-          ))}
+        <div className="row row-between row-wrap">
+          <Skeleton height={20} width="30%" radius="xl" />
+          <Skeleton height={24} width={200} radius="xl" />
         </div>
+        <TableSkeleton columns={INDEX_COLUMNS} />
       </section>
     </div>
   )

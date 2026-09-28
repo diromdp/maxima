@@ -1,171 +1,189 @@
 "use client"
 
-import { Checkbox, Modal } from "@mantine/core"
-import { useState } from "react"
+import { Checkbox, Modal, Skeleton } from "@mantine/core"
+import { useForm } from "@mantine/form"
 
+import { QueryError } from "@/src/components/data/QueryError"
 import { Notice } from "@/src/components/ui/Notice"
-import { notify } from "@/src/lib/notify"
-
+import { registerExamStudents } from "@/src/entities/certificate/actions"
+import { examCandidatesQuery, SCHEDULE_KEYS } from "@/src/entities/certificate/queries"
 import {
-  type ExamRecommendation,
-  type ExamSchedule,
-  quotaLabel,
-  RECOMMENDATION_BADGE,
-  RECOMMENDATIONS,
-  type Registrant,
-} from "./sample"
+  type ExamCandidateRow,
+  type ExamScheduleRow,
+  READINESS_BADGE,
+} from "@/src/entities/certificate/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { useActionForm } from "@/src/lib/use-action-form"
 
 const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
+const CANDIDATE_SKELETONS = 4
+
+type RegisterForm = { studentIds: string[]; isOverCapacityConfirmed: boolean }
 
 export function RegisterStudentsModal({
-  opened,
-  onClose,
   schedule,
-  registered,
-  onRegister,
+  onClose,
 }: {
-  opened: boolean
+  schedule: ExamScheduleRow
   onClose: () => void
-  schedule: ExamSchedule
-  registered: readonly Registrant[]
-  onRegister: (students: readonly ExamRecommendation[]) => void
 }) {
-  const [selected, setSelected] = useState<string[]>([])
-  const [isOverQuotaConfirmed, setIsOverQuotaConfirmed] = useState(false)
-
-  const level = schedule.level
-  const registeredNis = new Set(registered.map((row) => row.nis))
-  const candidates = RECOMMENDATIONS.filter(
-    (row) => row.level === level && !registeredNis.has(row.nis),
-  )
-  const remaining = Math.max(0, schedule.capacity - schedule.registered)
-  const isOverQuota = selected.length > remaining
-  const notReady = selected.filter(
-    (nis) => candidates.find((row) => row.nis === nis)?.recommendation === "Belum Siap",
-  ).length
-  const canSubmit = selected.length > 0 && (!isOverQuota || isOverQuotaConfirmed)
+  const candidates = useRead(examCandidatesQuery(schedule.id))
 
   return (
     <Modal
-      opened={opened}
+      opened
       onClose={onClose}
       title={`Daftarkan Siswa ke ${schedule.name}`}
       size="lg"
       styles={TITLE_STYLE}
     >
-      <form
-        className="stack stack-lg"
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (!canSubmit) return
-          const students = candidates.filter((row) => selected.includes(row.nis))
-          onRegister(students)
-          notify.success(
-            `${students.length} siswa terdaftar ke ${schedule.name}. Tagihan ujian terbit di Pembayaran.`,
-          )
-          onClose()
-        }}
-      >
-        <div className="row row-wrap" style={{ gap: 24 }}>
-          <div className="stack" style={{ gap: 2 }}>
-            <span className="caption text-muted">Kuota</span>
-            <span className="body-sm" style={{ fontWeight: 600 }}>
-              {quotaLabel(schedule)}
-            </span>
-          </div>
-          <div className="stack" style={{ gap: 2 }}>
-            <span className="caption text-muted">Sisa kursi</span>
-            <span
-              className={`body-sm ${remaining === 0 ? "text-danger" : ""}`}
-              style={{ fontWeight: 600 }}
-            >
-              {remaining}
-            </span>
-          </div>
-          <div className="stack" style={{ gap: 2 }}>
-            <span className="caption text-muted">Dipilih</span>
-            <span className="body-sm" style={{ fontWeight: 600 }}>
-              {selected.length}
-            </span>
-          </div>
+      {candidates.isError ? (
+        <QueryError message={candidates.error.message} onRetry={() => void candidates.refetch()} />
+      ) : candidates.isPending ? (
+        <div className="stack" aria-busy="true">
+          <span className="sr-only" role="status">
+            Memuat
+          </span>
+          {Array.from({ length: CANDIDATE_SKELETONS }, (_, index) => (
+            <Skeleton key={index} height={44} radius="sm" aria-hidden />
+          ))}
         </div>
+      ) : (
+        <RegisterFormBody schedule={schedule} candidates={candidates.data.data} onClose={onClose} />
+      )}
+    </Modal>
+  )
+}
 
-        {candidates.length === 0 ? (
-          <Notice tone="neutral">
-            Semua siswa level {level} dengan rekomendasi sudah terdaftar di jadwal ini. Siswa lain
-            perlu direkomendasikan dulu di tab Rekomendasi Ujian.
-          </Notice>
-        ) : (
-          <Checkbox.Group
-            label={`Siswa level ${level} yang belum terdaftar`}
-            description="Daftar diambil dari tab Rekomendasi Ujian. Siswa Belum Siap tetap bisa didaftarkan, tapi tercatat."
-            value={selected}
-            onChange={(value) => {
-              setSelected(value)
-              setIsOverQuotaConfirmed(false)
-            }}
-          >
-            <div className="list-rows" style={{ marginTop: 8 }}>
-              {candidates.map((row) => (
-                <Checkbox
-                  key={row.nis}
-                  value={row.nis}
-                  label={
-                    <span className="row row-wrap" style={{ gap: 8 }}>
-                      <span style={{ fontWeight: 600 }}>{row.studentName}</span>
-                      <span className="caption text-muted tabular">{row.nis}</span>
-                      <span className={`badge ${RECOMMENDATION_BADGE[row.recommendation]}`}>
+function RegisterFormBody({
+  schedule,
+  candidates,
+  onClose,
+}: {
+  schedule: ExamScheduleRow
+  candidates: readonly ExamCandidateRow[]
+  onClose: () => void
+}) {
+  const form = useForm<RegisterForm>({
+    initialValues: { studentIds: [], isOverCapacityConfirmed: false },
+  })
+  const selected = form.values.studentIds
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) =>
+      registerExamStudents(schedule.id, values.studentIds, values.isOverCapacityConfirmed),
+    successMessage: `${selected.length} siswa terdaftar ke ${schedule.name}.`,
+    invalidates: SCHEDULE_KEYS,
+    onSuccess: onClose,
+  })
+
+  const isOverQuota = selected.length > schedule.remainingSeats
+  const notReady = candidates.filter(
+    (row) => selected.includes(row.studentId) && row.recommendation !== "Siap Ujian",
+  ).length
+  const blockedReason =
+    selected.length === 0
+      ? "Pilih minimal satu siswa"
+      : isOverQuota && !form.values.isOverCapacityConfirmed
+        ? "Centang konfirmasi kuota dulu"
+        : undefined
+
+  return (
+    <form className="stack stack-lg" onSubmit={submit} noValidate>
+      {formError && <Notice tone="danger">{formError}</Notice>}
+
+      <dl className="row row-wrap" style={{ gap: 24, margin: 0 }}>
+        {[
+          ["Kuota", `${schedule.registeredCount} / ${schedule.capacity} Terdaftar`],
+          ["Sisa kursi", String(schedule.remainingSeats)],
+          ["Dipilih", String(selected.length)],
+        ].map(([label, value]) => (
+          <div key={label} className="stack" style={{ gap: 2 }}>
+            <dt className="caption text-muted">{label}</dt>
+            <dd className="body-sm" style={{ fontWeight: 600, margin: 0 }}>
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {candidates.length === 0 ? (
+        <Notice tone="neutral">
+          Tidak ada siswa Aktif level {schedule.level.name} yang belum terdaftar di jadwal ini.
+          Siswa baru muncul di sini bila kelas aktifnya selevel dengan jadwal ujian.
+        </Notice>
+      ) : (
+        <Checkbox.Group
+          label={`Siswa level ${schedule.level.name} yang belum terdaftar`}
+          description="Siswa Belum Siap atau yang belum direkomendasikan tetap bisa didaftarkan, dengan peringatan."
+          value={selected}
+          onChange={(value) => {
+            form.setFieldValue("studentIds", value)
+            form.setFieldValue("isOverCapacityConfirmed", false)
+          }}
+        >
+          <div className="list-rows" style={{ marginTop: 8 }}>
+            {candidates.map((row) => (
+              <Checkbox
+                key={row.studentId}
+                value={row.studentId}
+                className="py-2"
+                label={
+                  <span className="row row-wrap" style={{ gap: 8 }}>
+                    <span style={{ fontWeight: 600 }}>{row.name}</span>
+                    <span className="caption text-muted tabular">{row.nis}</span>
+                    {row.recommendation ? (
+                      <span className={`badge ${READINESS_BADGE[row.recommendation]}`}>
                         {row.recommendation}
                       </span>
-                    </span>
-                  }
-                  className="py-2"
-                />
-              ))}
-            </div>
-          </Checkbox.Group>
-        )}
+                    ) : (
+                      <span className="badge badge-terkunci">Belum direkomendasikan</span>
+                    )}
+                  </span>
+                }
+              />
+            ))}
+          </div>
+        </Checkbox.Group>
+      )}
 
-        {notReady > 0 && (
-          <Notice tone="warning">
-            {notReady} siswa yang dipilih masih berstatus Belum Siap. Pendaftarannya tetap masuk log
-            atas nama Anda.
-          </Notice>
-        )}
+      {notReady > 0 && (
+        <Notice tone="warning">
+          {notReady} siswa yang dipilih belum berstatus Siap Ujian. Pendaftarannya tetap masuk log
+          atas nama Anda.
+        </Notice>
+      )}
 
-        {isOverQuota && (
-          <Notice tone="danger" title="Melebihi kuota">
-            Anda memilih {selected.length} siswa, sisa kursi hanya {remaining}. Pendaftaran di atas
-            kuota butuh konfirmasi.
-            <Checkbox
-              mt="sm"
-              label="Saya paham kuota terlampaui dan sudah dikonfirmasi ke penyelenggara"
-              checked={isOverQuotaConfirmed}
-              onChange={(event) => setIsOverQuotaConfirmed(event.currentTarget.checked)}
-            />
-          </Notice>
-        )}
-
-        <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Batal
-          </button>
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={!canSubmit}
-            title={
-              selected.length === 0
-                ? "Pilih minimal satu siswa"
-                : isOverQuota && !isOverQuotaConfirmed
-                  ? "Centang konfirmasi kuota dulu"
-                  : undefined
+      {isOverQuota && (
+        <Notice tone="danger" title="Melebihi kuota">
+          Anda memilih {selected.length} siswa, sisa kursi hanya {schedule.remainingSeats}.
+          Pendaftaran di atas kuota butuh konfirmasi.
+          <Checkbox
+            mt="sm"
+            label="Saya paham kuota terlampaui dan sudah dikonfirmasi ke penyelenggara"
+            checked={form.values.isOverCapacityConfirmed}
+            onChange={(event) =>
+              form.setFieldValue("isOverCapacityConfirmed", event.currentTarget.checked)
             }
-          >
-            Daftarkan {selected.length > 0 ? `${selected.length} Siswa` : "Siswa"}
-          </button>
-        </div>
-      </form>
-    </Modal>
+          />
+        </Notice>
+      )}
+
+      <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+        <button type="button" className="btn btn-secondary" onClick={onClose}>
+          Batal
+        </button>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={blockedReason !== undefined || isPending}
+          title={blockedReason}
+        >
+          {isPending
+            ? "Menyimpan..."
+            : `Daftarkan ${selected.length > 0 ? `${selected.length} Siswa` : "Siswa"}`}
+        </button>
+      </div>
+    </form>
   )
 }

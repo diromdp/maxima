@@ -2,18 +2,23 @@
 
 import { Select, TextInput } from "@mantine/core"
 
-import { CHAPTER_COMPLETIONS, CHAPTERS, LEARNING_STATUSES, type SessionProgress } from "./sample"
+import {
+  CHAPTER_COMPLETIONS,
+  CHAPTERS,
+  LEARNING_STATUSES,
+  type SessionProgress,
+} from "@/src/entities/session/schema"
 
-export type ProgressDraft = {
-  readonly [Key in keyof SessionProgress]: SessionProgress[Key] | null
-}
+type ProgressDraft = SessionProgress
 
 export function ProgressFields({
   progress,
+  errors,
   readOnly,
   onChange,
 }: {
   progress: ProgressDraft
+  errors: Readonly<Record<string, string>>
   readOnly: boolean
   onChange: (patch: Partial<ProgressDraft>) => void
 }) {
@@ -27,8 +32,9 @@ export function ProgressFields({
         data={CHAPTERS}
         value={progress.chapter}
         onChange={(value) => onChange({ chapter: value })}
+        error={errors.chapter}
         readOnly={readOnly}
-        allowDeselect={false}
+        clearable={!readOnly}
       />
       <Select
         label="Ketuntasan Kapitel"
@@ -36,8 +42,11 @@ export function ProgressFields({
         data={[...CHAPTER_COMPLETIONS]}
         value={progress.completion}
         onChange={(value) => onChange({ completion: value as ProgressDraft["completion"] })}
+        error={errors.completion}
         readOnly={readOnly}
-        allowDeselect={false}
+        disabled={!readOnly && progress.chapter === null}
+        description={!readOnly && progress.chapter === null ? "Pilih Kapitel dulu." : undefined}
+        clearable={!readOnly}
       />
 
       <Select
@@ -46,8 +55,9 @@ export function ProgressFields({
         data={[...LEARNING_STATUSES]}
         value={progress.learningStatus}
         onChange={(value) => onChange({ learningStatus: value as ProgressDraft["learningStatus"] })}
+        error={errors.learningStatus}
         readOnly={readOnly}
-        allowDeselect={false}
+        clearable={!readOnly}
       />
 
       <TextInput
@@ -55,6 +65,8 @@ export function ProgressFields({
         placeholder="Siap untuk Bab 5 (Besok)"
         value={progress.nextChapter ?? ""}
         onChange={(event) => onChange({ nextChapter: event.currentTarget.value })}
+        error={errors.nextChapter}
+        maxLength={120}
         readOnly={readOnly}
       />
     </section>

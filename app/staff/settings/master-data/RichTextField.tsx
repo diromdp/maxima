@@ -8,35 +8,28 @@ import {
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { useRef } from "react"
 
-// ponytail: editor WYSIWYG di atas contentEditable + execCommand, tanpa dependensi.
-// Cukup untuk fase slicing (tebal, miring, garis bawah, dua jenis daftar). Ganti ke
-// @mantine/tiptap saat backend butuh HTML yang bersih dan bisa divalidasi.
 const TOOLS = [
-  { cmd: "bold", label: "Tebal", icon: TextBoldIcon },
-  { cmd: "italic", label: "Miring", icon: TextItalicIcon },
-  { cmd: "underline", label: "Garis bawah", icon: TextUnderlineIcon },
-  { cmd: "insertUnorderedList", label: "Daftar", icon: LeftToRightListBulletIcon },
-  { cmd: "insertOrderedList", label: "Daftar bernomor", icon: LeftToRightListNumberIcon },
+  { command: "bold", label: "Tebal", icon: TextBoldIcon },
+  { command: "italic", label: "Miring", icon: TextItalicIcon },
+  { command: "underline", label: "Garis bawah", icon: TextUnderlineIcon },
+  { command: "insertUnorderedList", label: "Daftar", icon: LeftToRightListBulletIcon },
+  { command: "insertOrderedList", label: "Daftar bernomor", icon: LeftToRightListNumberIcon },
 ] as const
 
 export function RichTextField({
-  name,
   label,
   defaultValue = "",
   placeholder,
+  error,
+  onChange,
 }: {
-  name: string
   label: string
   defaultValue?: string
   placeholder?: string
+  error?: React.ReactNode
+  onChange: (html: string) => void
 }) {
-  const hidden = useRef<HTMLInputElement>(null)
-  const sync = (el: HTMLDivElement) => {
-    if (hidden.current) hidden.current.value = el.innerHTML
-  }
-
   return (
     <div className="stack" style={{ gap: 4 }}>
       <span className="field-label">{label}</span>
@@ -47,20 +40,19 @@ export function RichTextField({
           aria-label={`Format ${label}`}
           style={{ gap: 2, padding: "4px 8px", background: "var(--color-canvas-soft)" }}
         >
-          {TOOLS.map((t) => (
+          {TOOLS.map((tool) => (
             <button
-              key={t.cmd}
+              key={tool.command}
               type="button"
               className="btn btn-ghost btn-icon btn-sm"
-              aria-label={t.label}
-              title={t.label}
-              // mousedown supaya fokus dan seleksi di editor tidak hilang
-              onMouseDown={(e) => {
-                e.preventDefault()
-                document.execCommand(t.cmd)
+              aria-label={tool.label}
+              title={tool.label}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                document.execCommand(tool.command)
               }}
             >
-              <HugeiconsIcon icon={t.icon} size={16} strokeWidth={1.5} />
+              <HugeiconsIcon icon={tool.icon} size={16} strokeWidth={1.5} />
             </button>
           ))}
         </div>
@@ -71,14 +63,14 @@ export function RichTextField({
           role="textbox"
           aria-multiline
           aria-label={label}
+          aria-invalid={error ? true : undefined}
           data-placeholder={placeholder}
           style={{ minHeight: 140, borderRadius: "0 0 8px 8px" }}
           dangerouslySetInnerHTML={{ __html: defaultValue }}
-          onInput={(e) => sync(e.currentTarget)}
-          onBlur={(e) => sync(e.currentTarget)}
+          onInput={(event) => onChange(event.currentTarget.innerHTML)}
         />
       </div>
-      <input ref={hidden} type="hidden" name={name} defaultValue={defaultValue} />
+      {error && <span className="caption text-danger">{error}</span>}
     </div>
   )
 }

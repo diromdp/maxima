@@ -1,114 +1,117 @@
 "use client"
 
-import { Search01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { TextInput } from "@mantine/core"
-import { useState } from "react"
+import { SegmentedControl } from "@mantine/core"
 
-import { DataTable } from "@/src/components/data/DataTable"
+import { ListSearch } from "@/src/components/data/ListSearch"
+import { QueryError } from "@/src/components/data/QueryError"
+import { ServerDataTable } from "@/src/components/data/ServerDataTable"
+import type { DataColumn } from "@/src/components/data/TableFrame"
+import { remindersQuery } from "@/src/entities/invoice/queries"
+import {
+  REMINDER_FILTERS,
+  REMINDER_STATUSES,
+  type ReminderRow,
+  type ReminderStatus,
+} from "@/src/entities/invoice/schema"
+import { queryString } from "@/src/lib/api/errors"
+import { useRead } from "@/src/lib/api/use-read"
 import { DASH, formatDateTime } from "@/src/lib/format"
-import { formatMoney } from "@/src/lib/money"
-import { notify } from "@/src/lib/notify"
+import { useListParams } from "@/src/lib/use-list-params"
 
-import { type Reminder, REMINDER_STATUS_BADGE, REMINDERS, receivableByNis } from "./sample"
+import { euro, rupiah } from "./format"
 
-type ReminderRow = Reminder & {
-  readonly studentName: string
-  readonly dueIdr: string
-  readonly dueEur: string
+const ALL = "all"
+
+const REMINDER_STATUS_BADGE: Readonly<Record<ReminderStatus, string>> = {
+  TERKIRIM: "badge-success",
+  GAGAL: "badge-danger",
 }
 
-const ROWS: readonly ReminderRow[] = REMINDERS.map((reminder) => {
-  const receivable = receivableByNis(reminder.nis)
-  return {
-    ...reminder,
-    studentName: receivable?.student.name ?? reminder.nis,
-    dueIdr: receivable ? formatMoney(receivable.dueIdr) : DASH,
-    dueEur: receivable?.dueEur ? formatMoney(receivable.dueEur) : DASH,
-  }
-})
+const COLUMNS: readonly DataColumn<ReminderRow>[] = [
+  { key: "sentAt", header: "Tanggal Kirim", cell: (row) => formatDateTime(row.sentAt) },
+  { key: "nis", header: "NIS", cell: (row) => <span className="tabular">{row.nis ?? DASH}</span> },
+  {
+    key: "name",
+    header: "Siswa",
+    cell: (row) => <span style={{ fontWeight: 600 }}>{row.name ?? DASH}</span>,
+  },
+  {
+    key: "remainingIdr",
+    header: "Piutang (IDR)",
+    align: "right",
+    cell: (row) => (row.remainingIdr === null ? DASH : rupiah(row.remainingIdr)),
+  },
+  {
+    key: "remainingEur",
+    header: "Piutang (EURO)",
+    align: "right",
+    cell: (row) => euro(row.remainingEurCents),
+  },
+  {
+    key: "status",
+    header: "Status",
+    wrap: true,
+    cell: (row) => (
+      <div className="stack" style={{ gap: 2, alignItems: "flex-start" }}>
+        <span className={`badge ${REMINDER_STATUS_BADGE[row.status]}`}>{row.status}</span>
+        {row.failureReason && <span className="caption text-danger">{row.failureReason}</span>}
+      </div>
+    ),
+  },
+]
 
 export function RemindersTab() {
-  const [query, setQuery] = useState("")
-  const needle = query.trim().toLowerCase()
-  const rows = ROWS.filter(
-    (row) =>
-      needle === "" || row.studentName.toLowerCase().includes(needle) || row.nis.includes(needle),
-  )
-  const failed = rows.filter((row) => row.status === "GAGAL").length
+  const { params, setParams } = useListParams(REMINDER_FILTERS)
+  const reminders = useRead(remindersQuery(params))
+  const summary = reminders.data?.summary
+  const exportQuery = queryString({ search: params.search, status: params.status })
 
   return (
     <section className="card stack">
       <div className="row row-between row-wrap">
         <div className="row row-wrap" style={{ gap: 12, alignItems: "center" }}>
-          <TextInput
-            aria-label="Cari pengiriman"
-            placeholder="Cari nama siswa atau NIS"
-            size="sm"
-            leftSection={<HugeiconsIcon icon={Search01Icon} size={16} strokeWidth={1.5} />}
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-            style={{ flex: "1 1 240px", maxWidth: 320 }}
-          />
-          <span className="caption text-muted">
-            {rows.length} pengiriman
-            {failed > 0 && <span className="text-danger">, {failed} gagal (email memantul)</span>}
-          </span>
+          <ListSearch label="Cari nama siswa atau NIS" />
+          {summary && (
+            <span className="caption text-muted">
+              {summary.total} pengiriman
+              {summary.failed > 0 && (
+                <span className="text-danger">, {summary.failed} gagal (email memantul)</span>
+              )}
+            </span>
+          )}
         </div>
-        <button
-          type="button"
+        <a
+          href={`/api/download/invoices/reminders/export${exportQuery}`}
           className="btn btn-secondary btn-sm"
-          onClick={() => notify.success(`Log ${rows.length} pengiriman diekspor ke CSV.`)}
         >
-          Ekspor Log (.CSV)
-        </button>
+          Ekspor Log (.xlsx)
+        </a>
       </div>
 
-      <DataTable<ReminderRow>
-        rows={rows}
-        rowKey={(row) => row.id}
-        defaultSort={{ key: "tanggal", dir: "desc" }}
-        filter={{ value: (row) => row.status, options: ["TERKIRIM", "GAGAL"] }}
-        emptyText="Belum ada pengiriman."
-        columns={[
-          {
-            key: "tanggal",
-            header: "Tanggal Kirim",
-            sort: (row) => row.sentAt,
-            cell: (row) => formatDateTime(row.sentAt),
-          },
-          { key: "nis", header: "NIS", cell: (row) => row.nis },
-          {
-            key: "siswa",
-            header: "Siswa",
-            sort: (row) => row.studentName,
-            cell: (row) => <span style={{ fontWeight: 600 }}>{row.studentName}</span>,
-          },
-          {
-            key: "piutang-idr",
-            header: "Piutang (IDR)",
-            align: "right",
-            cell: (row) => row.dueIdr,
-          },
-          {
-            key: "piutang-eur",
-            header: "Piutang (EURO)",
-            align: "right",
-            cell: (row) => row.dueEur,
-          },
-          {
-            key: "status",
-            header: "Status",
-            sort: (row) => row.status,
-            cell: (row) => (
-              <div className="stack" style={{ gap: 2, alignItems: "flex-start" }}>
-                <span className={`badge ${REMINDER_STATUS_BADGE[row.status]}`}>{row.status}</span>
-                {row.failure && <span className="caption text-danger">{row.failure}</span>}
-              </div>
-            ),
-          },
+      <SegmentedControl
+        size="sm"
+        aria-label="Saring status pengiriman"
+        style={{ alignSelf: "flex-start" }}
+        value={params.status ?? ALL}
+        onChange={(value) => setParams({ status: value === ALL ? null : value })}
+        data={[
+          { value: ALL, label: "Semua" },
+          ...REMINDER_STATUSES.map((status) => ({ value: status, label: status })),
         ]}
       />
+
+      {reminders.isError ? (
+        <QueryError message={reminders.error.message} onRetry={() => void reminders.refetch()} />
+      ) : (
+        <ServerDataTable
+          rows={reminders.data?.data ?? []}
+          total={reminders.data?.meta.total ?? 0}
+          isPending={reminders.isPending}
+          columns={COLUMNS}
+          rowKey={(row) => row.id}
+          emptyText="Belum ada pengiriman pada saringan ini."
+        />
+      )}
     </section>
   )
 }

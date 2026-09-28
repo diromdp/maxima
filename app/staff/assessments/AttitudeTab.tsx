@@ -2,32 +2,46 @@
 
 import { Select } from "@mantine/core"
 
-import { formatPercent } from "@/src/lib/format"
-
-import { SaveBar } from "./SaveBar"
+import { saveAttitudeSheet } from "@/src/entities/assessment/actions"
 import {
-  type AssessmentClass,
-  ATTENDANCE_BY_STUDENT,
-  ATTITUDE_ASPECTS,
+  type AssessmentSheet,
   ATTITUDE_GRADE_LABEL,
   ATTITUDE_GRADES,
-  ATTITUDE_SCORES,
   type AttitudeGrade,
-  LOW_ATTENDANCE,
-  type Student,
-  STUDENTS_BY_CLASS,
-} from "./sample"
-import { useScoreSheet } from "./useScoreSheet"
+  LOW_ATTENDANCE_PERCENT,
+  LOW_ATTITUDE_GRADES,
+  type SheetKey,
+  isFormerMember,
+} from "@/src/entities/assessment/schema"
 
-const LOW_GRADES: readonly AttitudeGrade[] = ["C", "PB"]
+import { SaveBar } from "./SaveBar"
+import { useSheetDraft } from "./useSheetDraft"
+import { SheetStudentName } from "./SheetStudentName"
 
-export function AttitudeTab({ room, readOnly }: { room: AssessmentClass; readOnly: boolean }) {
-  const students: readonly Student[] = STUDENTS_BY_CLASS[room.id] ?? []
-  const { scoreOf, isDirty, setScore, dirtyCount, save } = useScoreSheet<AttitudeGrade>(
-    ATTITUDE_SCORES[room.id] ?? {},
-  )
+export function AttitudeTab({
+  sheet,
+  sheetKey,
+  readOnly,
+}: {
+  sheet: AssessmentSheet
+  sheetKey: SheetKey
+  readOnly: boolean
+}) {
+  const { aspects, students } = sheet
+  const draft = useSheetDraft<AttitudeGrade>({
+    sheetKey,
+    serverValueOf: (studentId, aspect) =>
+      students.find((student) => student.studentId === studentId)?.attitudes[aspect] ?? null,
+    save: (changes) =>
+      saveAttitudeSheet({
+        ...sheetKey,
+        version: sheet.versions.attitudes,
+        rows: Object.entries(changes).map(([studentId, grades]) => ({ studentId, grades })),
+      }),
+    successMessage: "Nilai sikap tersimpan.",
+  })
   const incomplete = students.filter((student) =>
-    ATTITUDE_ASPECTS.some((aspect) => scoreOf(student.nis, aspect.key) === null),
+    aspects.some((aspect) => draft.valueOf(student.studentId, aspect.code) === null),
   ).length
 
   return (
@@ -58,10 +72,9 @@ export function AttitudeTab({ room, readOnly }: { room: AssessmentClass; readOnl
           <table className="table">
             <thead>
               <tr>
-                <th>NIS</th>
                 <th>Nama Siswa</th>
-                {ATTITUDE_ASPECTS.map((aspect) => (
-                  <th key={aspect.key} style={{ textAlign: "center" }}>
+                {aspects.map((aspect) => (
+                  <th key={aspect.code} style={{ textAlign: "center" }}>
                     {aspect.label}
                   </th>
                 ))}
@@ -70,17 +83,18 @@ export function AttitudeTab({ room, readOnly }: { room: AssessmentClass; readOnl
             </thead>
             <tbody>
               {students.map((student) => {
-                const attendance = ATTENDANCE_BY_STUDENT[student.nis]
+                const attendance = student.attendancePercent
                 return (
-                  <tr key={student.nis}>
-                    <td className="tabular text-muted">{student.nis}</td>
-                    <td style={{ fontWeight: 600 }}>{student.name}</td>
-                    {ATTITUDE_ASPECTS.map((aspect) => {
-                      const grade = scoreOf(student.nis, aspect.key)
-                      const isLow = grade !== null && LOW_GRADES.includes(grade)
+                  <tr key={student.studentId}>
+                    <td style={{ fontWeight: 600 }}>
+                      <SheetStudentName student={student} />
+                    </td>
+                    {aspects.map((aspect) => {
+                      const grade = draft.valueOf(student.studentId, aspect.code)
+                      const isLow = grade !== null && LOW_ATTITUDE_GRADES.includes(grade)
                       return (
-                        <td key={aspect.key} style={{ textAlign: "center", padding: "6px 4px" }}>
-                          {readOnly ? (
+                        <td key={aspect.code} style={{ textAlign: "center", padding: "6px 4px" }}>
+                          {readOnly || isFormerMember(student) ? (
                             <span className={isLow ? "text-danger" : undefined}>
                               {grade ?? "-"}
                             </span>
@@ -94,12 +108,18 @@ export function AttitudeTab({ room, readOnly }: { room: AssessmentClass; readOnl
                                 data={[...ATTITUDE_GRADES]}
                                 value={grade}
                                 onChange={(value) =>
-                                  setScore(student.nis, aspect.key, value as AttitudeGrade | null)
+                                  draft.setValue(
+                                    student.studentId,
+                                    aspect.code,
+                                    value as AttitudeGrade | null,
+                                  )
                                 }
                                 comboboxProps={{ withinPortal: true }}
-                                className={isLow ? "text-danger" : undefined}
+                                styles={
+                                  isLow ? { input: { color: "var(--color-danger)" } } : undefined
+                                }
                               />
-                              {isDirty(student.nis, aspect.key) && (
+                              {draft.isDirty(student.studentId, aspect.code) && (
                                 <span
                                   aria-hidden
                                   className="bg-warning-solid absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full"
@@ -111,10 +131,10 @@ export function AttitudeTab({ room, readOnly }: { room: AssessmentClass; readOnl
                       )
                     })}
                     <td
-                      className={`numeric ${attendance !== undefined && attendance < LOW_ATTENDANCE ? "text-danger" : ""}`}
+                      className={`numeric ${attendance !== null && attendance < LOW_ATTENDANCE_PERCENT ? "text-danger" : ""}`}
                       style={{ fontWeight: 600 }}
                     >
-                      {attendance === undefined ? "-" : formatPercent(attendance)}
+                      {attendance === null ? "-" : `${Math.round(attendance)}%`}
                     </td>
                   </tr>
                 )
@@ -130,11 +150,12 @@ export function AttitudeTab({ room, readOnly }: { room: AssessmentClass; readOnl
       </section>
 
       <SaveBar
-        dirtyCount={dirtyCount}
+        dirtyCount={draft.dirtyCount}
         unit="nilai sikap"
         label="Simpan Nilai Sikap"
         readOnly={readOnly}
-        onSave={save}
+        isPending={draft.isPending}
+        onSave={() => void draft.submit()}
       />
     </div>
   )

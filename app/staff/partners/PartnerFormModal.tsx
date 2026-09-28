@@ -1,69 +1,115 @@
 "use client"
 
-import { Modal, NumberInput, Select, TextInput } from "@mantine/core"
+import { NumberInput, Select, TextInput } from "@mantine/core"
+import { schemaResolver, useForm } from "@mantine/form"
 
-import { notify } from "@/src/lib/notify"
+import { FormModal } from "@/src/components/ui/FormModal"
+import { useMasterOptions } from "@/src/entities/master-data/use-master-options"
+import { savePartner } from "@/src/entities/partner/actions"
+import {
+  PARTNERSHIP_STATUSES,
+  partnerFormSchema,
+  type PartnerForm,
+  type PartnerRow,
+} from "@/src/entities/partner/schema"
+import { useActionForm } from "@/src/lib/use-action-form"
 
-import { INDUSTRIES, PARTNERSHIP_STATUSES } from "./sample"
+const initialOf = (partner?: PartnerRow): PartnerForm => ({
+  name: partner?.name ?? "",
+  city: partner?.city ?? "",
+  categoryId: partner?.category?.id ?? null,
+  openPositions: partner?.openPositions ?? "",
+  status: partner?.status ?? "Aktif",
+  contactName: partner?.contactName ?? "",
+  contactEmail: partner?.contactEmail ?? "",
+  contactPhone: partner?.contactPhone ?? "",
+})
 
-const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
+export function PartnerFormModal({
+  initial,
+  onClose,
+}: {
+  initial?: PartnerRow
+  onClose: () => void
+}) {
+  const { partnerCategories } = useMasterOptions()
+  const form = useForm<PartnerForm>({
+    initialValues: initialOf(initial),
+    validate: schemaResolver(partnerFormSchema, { sync: true }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) => savePartner(initial?.id ?? null, values),
+    successMessage: initial ? `Perubahan ${initial.name} disimpan.` : "Partner baru disimpan.",
+    invalidates: [["partners"]],
+    onSuccess: onClose,
+  })
 
-export function PartnerFormModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   return (
-    <Modal opened={opened} onClose={onClose} title="Tambah Partner" size="lg" styles={TITLE_STYLE}>
-      <form
-        className="stack stack-lg"
-        onSubmit={(event) => {
-          event.preventDefault()
-          notify.success("Partner baru disimpan.")
-          onClose()
-        }}
-      >
-        <TextInput name="name" label="Nama Perusahaan" placeholder="Asklepios Kliniken" required />
-        <div className="grid-2">
-          <TextInput name="city" label="Kota" placeholder="Hamburg" required />
-          <Select
-            name="industry"
-            label="Industri"
-            placeholder="Pilih industri"
-            data={[...INDUSTRIES]}
-            required
-          />
-        </div>
-        <div className="grid-2">
-          <NumberInput
-            name="openPositions"
-            label="Posisi Tersedia"
-            placeholder="0"
-            min={0}
-            allowDecimal={false}
-            required
-          />
-          <Select
-            name="status"
-            label="Status Kerjasama"
-            data={[...PARTNERSHIP_STATUSES]}
-            defaultValue="Aktif"
-            allowDeselect={false}
-            required
-          />
-        </div>
-        <TextInput
-          name="contact"
-          label="Kontak PIC"
-          description="Nama dan satu kanal, misalnya telepon atau email."
-          placeholder="Dr. Müller (+49 40 ...)"
-          required
+    <FormModal
+      title={initial ? `Ubah ${initial.name}` : "Tambah Partner"}
+      size="lg"
+      submitLabel="Simpan Partner"
+      formError={formError}
+      isPending={isPending}
+      onSubmit={submit}
+      onClose={onClose}
+    >
+      <TextInput
+        label="Nama Perusahaan"
+        placeholder="Asklepios Kliniken"
+        withAsterisk
+        data-autofocus
+        {...form.getInputProps("name")}
+      />
+      <div className="grid-2">
+        <TextInput label="Kota" placeholder="Hamburg" {...form.getInputProps("city")} />
+        <Select
+          label="Industri"
+          placeholder="Pilih industri"
+          data={[...partnerCategories]}
+          clearable
+          {...form.getInputProps("categoryId")}
         />
-        <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Batal
-          </button>
-          <button type="submit" className="btn btn-primary">
-            Simpan Partner
-          </button>
+      </div>
+      <div className="grid-2">
+        <NumberInput
+          label="Posisi Tersedia"
+          placeholder="0"
+          min={0}
+          allowDecimal={false}
+          withAsterisk
+          {...form.getInputProps("openPositions")}
+        />
+        <Select
+          label="Status Kerjasama"
+          data={[...PARTNERSHIP_STATUSES]}
+          allowDeselect={false}
+          withAsterisk
+          {...form.getInputProps("status")}
+        />
+      </div>
+      <div className="stack stack-sm">
+        <span className="field-label">Kontak PIC</span>
+        <TextInput
+          aria-label="Nama kontak PIC"
+          placeholder="Nama, misalnya Dr. Müller"
+          {...form.getInputProps("contactName")}
+        />
+        <div className="grid-2">
+          <TextInput
+            aria-label="Telepon kontak PIC"
+            placeholder="Telepon, misalnya +49 40 1234567"
+            {...form.getInputProps("contactPhone")}
+          />
+          <TextInput
+            aria-label="Surel kontak PIC"
+            type="email"
+            placeholder="Surel, misalnya mueller@asklepios.de"
+            {...form.getInputProps("contactEmail")}
+          />
         </div>
-      </form>
-    </Modal>
+      </div>
+    </FormModal>
   )
 }

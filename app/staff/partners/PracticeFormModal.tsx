@@ -1,78 +1,106 @@
 "use client"
 
-import { Modal, NumberInput, Select, TextInput } from "@mantine/core"
+import { NumberInput, Select, TextInput } from "@mantine/core"
 import { DateInput, DatesProvider, TimeInput } from "@mantine/dates"
+import { schemaResolver, useForm } from "@mantine/form"
 
-import { notify } from "@/src/lib/notify"
+import { FormModal } from "@/src/components/ui/FormModal"
+import { schedulePractice } from "@/src/entities/partner/actions"
+import { trainersQuery } from "@/src/entities/partner/queries"
+import { practiceFormSchema, type PracticeForm } from "@/src/entities/partner/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { useActionForm } from "@/src/lib/use-action-form"
 
-import { CANDIDATES, PARTNERS, TRAINERS } from "./sample"
+import { StudentPicker } from "./StudentPicker"
+import { usePartnerOptions } from "./use-partner-options"
 
-const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
+export function PracticeFormModal({ onClose }: { onClose: () => void }) {
+  const { partners } = usePartnerOptions()
+  const trainers = useRead(trainersQuery())
+  const form = useForm<PracticeForm>({
+    initialValues: {
+      studentId: "",
+      partnerId: null,
+      position: "",
+      date: "",
+      startsAt: "",
+      round: 1,
+      trainerUserId: "",
+    },
+    validate: schemaResolver(practiceFormSchema, { sync: true }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: schedulePractice,
+    successMessage: "Latihan dijadwalkan. Siswa melihat jadwalnya di portal.",
+    invalidates: [["interview-practices"]],
+    onSuccess: onClose,
+  })
 
-export function PracticeFormModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
+    <FormModal
       title="Jadwalkan Latihan Wawancara"
       size="lg"
-      styles={TITLE_STYLE}
+      submitLabel="Jadwalkan"
+      formError={formError}
+      isPending={isPending}
+      onSubmit={submit}
+      onClose={onClose}
     >
-      <form
-        className="stack stack-lg"
-        onSubmit={(event) => {
-          event.preventDefault()
-          notify.success("Latihan dijadwalkan. Siswa melihat jadwalnya di portal.")
-          onClose()
-        }}
-      >
+      <StudentPicker
+        value={form.values.studentId}
+        error={form.errors.studentId}
+        onChange={(next) => form.setFieldValue("studentId", next)}
+      />
+      <div className="grid-2">
         <Select
-          label="Siswa"
-          placeholder="Pilih siswa"
+          label="Partner yang dilamar"
+          placeholder="Pilih partner"
           searchable
-          data={CANDIDATES.map((row) => ({ value: row.nis, label: `${row.name} · ${row.nis}` }))}
-          required
+          clearable
+          data={partners}
+          {...form.getInputProps("partnerId")}
         />
+        <TextInput
+          label="Posisi Dilamar"
+          placeholder="Perawat (FSJ)"
+          {...form.getInputProps("position")}
+        />
+      </div>
+      <DatesProvider settings={{ locale: "id" }}>
         <div className="grid-2">
-          <Select
-            label="Partner yang dilamar"
-            placeholder="Pilih partner"
-            data={PARTNERS.map((partner) => ({ value: partner.id, label: partner.shortName }))}
-            required
+          <DateInput
+            label="Tanggal"
+            placeholder="Pilih tanggal"
+            valueFormat="DD MMM YYYY"
+            withAsterisk
+            {...form.getInputProps("date")}
           />
-          <TextInput label="Posisi Dilamar" placeholder="Perawat (FSJ)" required />
+          <TimeInput label="Jam" withAsterisk {...form.getInputProps("startsAt")} />
         </div>
-        <DatesProvider settings={{ locale: "id" }}>
-          <div className="grid-2">
-            <DateInput
-              label="Tanggal"
-              placeholder="Pilih tanggal"
-              valueFormat="DD MMM YYYY"
-              required
-            />
-            <TimeInput label="Jam" required />
-          </div>
-        </DatesProvider>
-        <div className="grid-2">
-          <NumberInput
-            label="Wawancara Ke"
-            description="Simulasi ke berapa untuk siswa ini."
-            placeholder="1"
-            min={1}
-            allowDecimal={false}
-            required
-          />
-          <Select label="PIC Pelatih" placeholder="Pilih pelatih" data={[...TRAINERS]} required />
-        </div>
-        <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Batal
-          </button>
-          <button type="submit" className="btn btn-primary">
-            Jadwalkan
-          </button>
-        </div>
-      </form>
-    </Modal>
+      </DatesProvider>
+      <div className="grid-2">
+        <NumberInput
+          label="Wawancara Ke"
+          description="Simulasi ke berapa untuk siswa ini."
+          placeholder="1"
+          min={1}
+          allowDecimal={false}
+          withAsterisk
+          {...form.getInputProps("round")}
+        />
+        <Select
+          label="PIC Pelatih"
+          placeholder={trainers.isError ? trainers.error.message : "Pilih pelatih"}
+          searchable
+          withAsterisk
+          data={(trainers.data?.data ?? []).map((trainer) => ({
+            value: trainer.id,
+            label: trainer.name,
+          }))}
+          {...form.getInputProps("trainerUserId")}
+        />
+      </div>
+    </FormModal>
   )
 }

@@ -1,46 +1,44 @@
 "use client"
 
-import { Search01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Select, TextInput } from "@mantine/core"
 import Link from "next/link"
-import { useState } from "react"
 
-import { DataTable, type DataColumn } from "@/src/components/data/DataTable"
-import { DASH } from "@/src/lib/format"
-
+import { ListFilter } from "@/src/components/data/ListFilter"
+import { ListSearch } from "@/src/components/data/ListSearch"
+import { QueryError } from "@/src/components/data/QueryError"
+import { ServerDataTable } from "@/src/components/data/ServerDataTable"
+import type { DataColumn } from "@/src/components/data/TableFrame"
+import { masterItemsQuery } from "@/src/entities/master-data/queries"
+import { useMasterOptions } from "@/src/entities/master-data/use-master-options"
+import { serviceBoardQuery, serviceOptionsQuery } from "@/src/entities/service/queries"
 import {
-  BOARD,
-  type BoardStudent,
-  BRANCHES,
-  PACKAGE_NAMES,
-  SERVICE_COLUMNS,
+  type BoardRow,
+  SERVICE_FILTERS,
   SERVICE_STATES,
   STATE_BADGE,
   STATE_HINT,
-} from "./sample"
+} from "@/src/entities/service/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { DASH } from "@/src/lib/format"
+import { useListParams } from "@/src/lib/use-list-params"
 
 export function ServiceBoard() {
-  const [branch, setBranch] = useState<string | null>(null)
-  const [packageName, setPackageName] = useState<string | null>(null)
-  const [query, setQuery] = useState("")
+  const { params } = useListParams(SERVICE_FILTERS)
+  const board = useRead(serviceBoardQuery(params))
+  const options = useRead(serviceOptionsQuery())
+  const masters = useRead(masterItemsQuery())
+  const { branches } = useMasterOptions()
 
-  const students = BOARD.filter(
-    (student) =>
-      (!branch || student.branch === branch) &&
-      (!packageName || student.packageName === packageName) &&
-      (query === "" ||
-        `${student.name} ${student.nis}`.toLowerCase().includes(query.toLowerCase())),
-  )
+  const services = (masters.data?.data ?? [])
+    .filter((item) => item.type === "service" && item.status === "Aktif")
+    .sort((left, right) => left.sortOrder - right.sortOrder)
 
-  const columns: readonly DataColumn<BoardStudent>[] = [
+  const columns: readonly DataColumn<BoardRow>[] = [
     {
       key: "name",
       header: "Nama Siswa",
-      sort: (student) => student.name,
       cell: (student) => (
         <Link
-          href={`/staff/services/${student.nis}`}
+          href={`/staff/services/${encodeURIComponent(student.nis)}`}
           className="stack"
           style={{ gap: 0, alignItems: "flex-start", textDecoration: "none", color: "inherit" }}
         >
@@ -48,30 +46,32 @@ export function ServiceBoard() {
             {student.name}
           </span>
           <span className="caption text-muted">
-            {student.packageName} · {student.branch}
+            {student.package.name} · {student.branch.name}
           </span>
         </Link>
       ),
     },
-    ...SERVICE_COLUMNS.map(({ id, label }): DataColumn<BoardStudent> => ({
-      key: id,
-      header: label,
+    ...services.map((service): DataColumn<BoardRow> => ({
+      key: service.code,
+      header: service.name,
       cell: (student) => {
-        const state = student.cells[id]
-        if (state === null) {
+        const cell = student.cells.find((candidate) => candidate.code === service.code)
+        if (!cell) {
           return (
             <span
               className="text-muted"
               role="img"
-              aria-label={`Tidak termasuk paket ${student.packageName}`}
+              aria-label={`Tidak termasuk paket ${student.package.name}`}
             >
               {DASH}
             </span>
           )
         }
         return (
-          <span className={`badge whitespace-nowrap px-1.5 text-[11px] ${STATE_BADGE[state]}`}>
-            {state}
+          <span
+            className={`badge whitespace-nowrap px-1.5 text-[11px] ${STATE_BADGE[cell.status]}`}
+          >
+            {cell.status}
           </span>
         )
       },
@@ -82,35 +82,22 @@ export function ServiceBoard() {
     <div className="stack stack-lg">
       <section className="card stack">
         <div className="row row-between row-wrap" style={{ alignItems: "flex-end" }}>
-          <TextInput
-            aria-label="Cari siswa"
-            placeholder="Cari nama atau NIS"
-            size="sm"
-            w={260}
-            leftSection={<HugeiconsIcon icon={Search01Icon} size={16} strokeWidth={1.5} />}
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
+          <ListSearch label="Cari nama atau NIS" />
           <div className="row row-wrap" style={{ gap: 8 }}>
-            <Select
-              aria-label="Saring cabang"
+            <ListFilter
+              name="branch"
+              label="cabang"
               placeholder="Cabang: Semua"
-              size="sm"
-              w={180}
-              data={[...BRANCHES]}
-              value={branch}
-              onChange={setBranch}
-              clearable
+              options={branches}
             />
-            <Select
-              aria-label="Saring paket"
+            <ListFilter
+              name="package"
+              label="paket"
               placeholder="Paket: Semua"
-              size="sm"
-              w={200}
-              data={[...PACKAGE_NAMES]}
-              value={packageName}
-              onChange={setPackageName}
-              clearable
+              options={(options.data?.packages ?? []).map((option) => ({
+                value: option.id,
+                label: option.name,
+              }))}
             />
           </div>
         </div>
@@ -133,13 +120,24 @@ export function ServiceBoard() {
           </span>
         </div>
 
-        <DataTable
-          rows={students}
-          rowKey={(student) => student.nis}
-          columns={columns}
-          defaultSort={{ key: "name", dir: "asc" }}
-          emptyText="Tidak ada siswa yang cocok dengan saringan."
-        />
+        {board.isError || masters.isError ? (
+          <QueryError
+            message={(board.error ?? masters.error)?.message ?? ""}
+            onRetry={() => {
+              void board.refetch()
+              void masters.refetch()
+            }}
+          />
+        ) : (
+          <ServerDataTable
+            rows={board.data?.data ?? []}
+            total={board.data?.meta.total ?? 0}
+            isPending={board.isPending || masters.isPending}
+            columns={columns}
+            rowKey={(student) => student.studentId}
+            emptyText="Tidak ada siswa ber-NIS dengan kontrak aktif yang cocok dengan saringan."
+          />
+        )}
       </section>
     </div>
   )

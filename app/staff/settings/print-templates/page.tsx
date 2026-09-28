@@ -1,5 +1,7 @@
 import { PageHeader } from "@/src/components/layout/PageHeader"
 import { Notice } from "@/src/components/ui/Notice"
+import { printTemplatesQuery } from "@/src/entities/print-template/queries"
+import { Prefetched } from "@/src/lib/api/Prefetched"
 import { requirePermission } from "@/src/lib/auth/session"
 
 import { TemplateGrid } from "./TemplateGrid"
@@ -20,7 +22,9 @@ export default async function PrintTemplatesPage() {
         siswa berubah.
       </Notice>
 
-      <TemplateGrid />
+      <Prefetched reads={[printTemplatesQuery()]}>
+        <TemplateGrid />
+      </Prefetched>
     </div>
   )
 }

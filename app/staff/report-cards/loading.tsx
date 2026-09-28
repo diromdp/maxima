@@ -1,6 +1,6 @@
 import { Skeleton } from "@mantine/core"
 
-import { QUEUE } from "./sample"
+const SKELETON_ROWS = 10
 
 export default function Loading() {
   return (
@@ -23,8 +23,8 @@ export default function Loading() {
           <Skeleton height={36} width={160} radius="xl" />
         </div>
         <div className="stack stack-sm">
-          {QUEUE.map((row) => (
-            <Skeleton key={row.nis} height={44} radius="sm" />
+          {Array.from({ length: SKELETON_ROWS }, (_, row) => (
+            <Skeleton key={row} height={44} radius="sm" />
           ))}
         </div>
         <Skeleton height={56} radius="sm" />

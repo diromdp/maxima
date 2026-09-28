@@ -1,23 +1,32 @@
 "use client"
 
-import { Checkbox, Group, Text, Title } from "@mantine/core"
-import { useLocalStorage } from "@mantine/hooks"
+import { Checkbox, Group, Skeleton, Text, Title } from "@mantine/core"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 
-import { DEPARTURE_CHECKLIST } from "./data"
+import { QueryError } from "@/src/components/data/QueryError"
+import { saveDepartureChecklist } from "@/src/entities/portal/actions"
+import { departureChecklistQuery } from "@/src/entities/portal/queries"
+import { useRead } from "@/src/lib/api/use-read"
+import { notify } from "@/src/lib/notify"
 
-/** Satu kunci untuk dua tempat centang (layar 3 dan layar 7) — satu daftar, satu jawaban. */
-const STORAGE_KEY = "maxima.departure-checklist"
+const SKELETON_ITEMS = 15
 
-/**
- * Checklist Keberangkatan. Dipakai di Progres Administrasi dan Pemberkasan
- * Alumni; centangnya disimpan di localStorage dengan satu kunci supaya
- * keduanya selalu sama. Pindah ke API portal saat Admission perlu membacanya.
- */
-export function DepartureChecklist({ title = "Checklist Keberangkatan" }: { title?: string }) {
-  const [checked, setChecked] = useLocalStorage<readonly string[]>({
-    key: STORAGE_KEY,
-    defaultValue: [],
-    getInitialValueInEffect: true,
+export function DepartureChecklist({
+  title = "Checklist Keberangkatan",
+  isOnLeave = false,
+}: {
+  title?: string
+  isOnLeave?: boolean
+}) {
+  const read = departureChecklistQuery()
+  const checklist = useRead(read)
+  const queryClient = useQueryClient()
+  const save = useMutation({
+    mutationFn: saveDepartureChecklist,
+    onSuccess: (result) => {
+      if (result.ok) queryClient.setQueryData(read.queryKey, result.data)
+      else notify.error(result.message)
+    },
   })
 
   return (
@@ -28,22 +37,50 @@ export function DepartureChecklist({ title = "Checklist Keberangkatan" }: { titl
             {title}
           </Title>
           <Text size="sm" c="dimmed">
-            Centang yang sudah Anda siapkan.
+            {isOnLeave
+              ? "Centang dibuka lagi setelah masa cuti Anda selesai."
+              : "Centang yang sudah Anda siapkan."}
           </Text>
         </div>
-        <Text size="sm" c="dimmed" className="tabular" style={{ whiteSpace: "nowrap" }}>
-          {checked.length} dari {DEPARTURE_CHECKLIST.length}
-        </Text>
+        {checklist.isSuccess && (
+          <Text size="sm" c="dimmed" className="tabular" style={{ whiteSpace: "nowrap" }}>
+            {checklist.data.checked} dari {checklist.data.total}
+          </Text>
+        )}
       </Group>
 
-      <Checkbox.Group value={[...checked]} onChange={setChecked}>
-        {/* 15 butir satu kolom terlalu panjang di samping kartu yang pendek. */}
-        <div className="grid-2" style={{ rowGap: 12 }}>
-          {DEPARTURE_CHECKLIST.map((item) => (
-            <Checkbox key={item} value={item} label={item} />
+      {checklist.isError ? (
+        <QueryError message={checklist.error.message} onRetry={() => void checklist.refetch()} />
+      ) : checklist.isPending ? (
+        <div className="grid-2" style={{ rowGap: 12 }} aria-busy="true">
+          <span className="sr-only" role="status">
+            Memuat
+          </span>
+          {Array.from({ length: SKELETON_ITEMS }, (_, index) => (
+            <Skeleton key={index} height={20} radius="xl" aria-hidden />
           ))}
         </div>
-      </Checkbox.Group>
+      ) : checklist.data.items.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          Belum ada butir checklist keberangkatan.
+        </Text>
+      ) : (
+        <Checkbox.Group
+          value={checklist.data.items.filter((item) => item.isChecked).map((item) => item.code)}
+          onChange={(codes) => save.mutate(codes)}
+        >
+          <div className="grid-2" style={{ rowGap: 12 }}>
+            {checklist.data.items.map((item) => (
+              <Checkbox
+                key={item.code}
+                value={item.code}
+                label={item.name}
+                disabled={isOnLeave || save.isPending}
+              />
+            ))}
+          </div>
+        </Checkbox.Group>
+      )}
     </section>
   )
 }

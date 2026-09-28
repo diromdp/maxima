@@ -1,8 +1,6 @@
 import { Skeleton } from "@mantine/core"
 
-import { STUDENTS_BY_CLASS } from "./sample"
-
-const ROWS = STUDENTS_BY_CLASS.berlin
+const SKELETON_STUDENTS = 8
 
 export default function Loading() {
   return (
@@ -34,8 +32,8 @@ export default function Loading() {
         <section className="card stack">
           <Skeleton height={20} width="50%" radius="xl" />
           <div className="stack stack-sm">
-            {ROWS.map((student) => (
-              <Skeleton key={student.nis} height={44} radius="sm" />
+            {Array.from({ length: SKELETON_STUDENTS }, (_, index) => (
+              <Skeleton key={index} height={44} radius="sm" />
             ))}
           </div>
         </section>

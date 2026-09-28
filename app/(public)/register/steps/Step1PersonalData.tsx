@@ -1,12 +1,20 @@
 import { Grid, GridCol, PasswordInput, Select, TextInput } from "@mantine/core"
 import { DateInput, DatesProvider } from "@mantine/dates"
 import type { UseFormReturnType } from "@mantine/form"
+
+import { PhoneInput } from "@/src/components/ui/PhoneInput"
 import { Calendar03Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { ANREDE_OPTIONS, GENDER_OPTIONS, type RegistrationValues } from "../data"
 
-export function Step1PersonalData({ form }: { form: UseFormReturnType<RegistrationValues> }) {
+export function Step1PersonalData({
+  form,
+  isAccountLocked = false,
+}: {
+  form: UseFormReturnType<RegistrationValues>
+  isAccountLocked?: boolean
+}) {
   return (
     <Grid gap="md">
       <GridCol span={{ base: 12, sm: 6 }}>
@@ -16,6 +24,7 @@ export function Step1PersonalData({ form }: { form: UseFormReturnType<Registrati
           placeholder="Input Email"
           type="email"
           autoComplete="email"
+          disabled={isAccountLocked}
           {...form.getInputProps("email")}
         />
       </GridCol>
@@ -23,8 +32,12 @@ export function Step1PersonalData({ form }: { form: UseFormReturnType<Registrati
         <PasswordInput
           label="Password"
           withAsterisk
-          placeholder="Input Password"
+          placeholder={isAccountLocked ? "Sudah tersimpan" : "Input Password"}
+          description={
+            isAccountLocked ? "Email dan password akun terkunci setelah draf dibuat." : undefined
+          }
           autoComplete="new-password"
+          disabled={isAccountLocked}
           {...form.getInputProps("password")}
         />
       </GridCol>
@@ -115,12 +128,19 @@ export function Step1PersonalData({ form }: { form: UseFormReturnType<Registrati
         />
       </GridCol>
 
-      <GridCol span={12}>
-        <TextInput
+      <GridCol span={{ base: 12, sm: 6 }}>
+        <PhoneInput
           label="Nomor HP Pribadi"
           withAsterisk
-          placeholder="08xxxxxxxxx"
           {...form.getInputProps("phonePersonal")}
+        />
+      </GridCol>
+      <GridCol span={{ base: 12, sm: 6 }}>
+        <PhoneInput
+          label="Nomor WhatsApp Aktif"
+          withAsterisk
+          placeholder="Dipakai untuk pengingat pembayaran"
+          {...form.getInputProps("whatsapp")}
         />
       </GridCol>
     </Grid>

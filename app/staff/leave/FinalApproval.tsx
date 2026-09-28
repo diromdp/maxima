@@ -1,81 +1,68 @@
 "use client"
 
-import { Group, Modal, Stack } from "@mantine/core"
-import { notifications } from "@mantine/notifications"
+import { useForm } from "@mantine/form"
 import { useState } from "react"
 
+import { FormModal } from "@/src/components/ui/FormModal"
 import { Notice } from "@/src/components/ui/Notice"
+import { decideApproval } from "@/src/entities/leave/actions"
+import { type LeaveDetail, leaveMonths, positionLabel } from "@/src/entities/leave/schema"
 import { formatDateLong, formatDateTime } from "@/src/lib/format"
-import { formatMoney, idr, shortfall as moneyShortfall } from "@/src/lib/money"
+import { formatMoney, idr } from "@/src/lib/money"
+import { useActionForm } from "@/src/lib/use-action-form"
 
-import { durationLabel, periodLabel } from "../../portal/leave/leave"
 import { Field, Panel } from "./LeavePanels"
 import { RejectModal } from "./RejectModal"
-import type { StaffLeave } from "./sample"
 
-const MODAL_TITLE = { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 }
+export const obligationLabel = (leave: LeaveDetail) =>
+  leave.finance.amountIdr ? formatMoney(idr(leave.finance.amountIdr)) : "Tidak ada tagihan tambahan"
 
-function ApproveModal({
-  leave,
-  opened,
-  onClose,
-}: {
-  leave: StaffLeave
-  opened: boolean
-  onClose: () => void
-}) {
+function ApproveModal({ leave, onClose }: { leave: LeaveDetail; onClose: () => void }) {
+  const form = useForm({ initialValues: {} })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: () => decideApproval(leave.id, { decision: "approve" }),
+    successMessage: `Cuti ${leave.student.name} disetujui. Tercatat di Log Aktivitas dan Riwayat Cuti siswa.`,
+    invalidates: [["leaves"], ["students"]],
+    onSuccess: onClose,
+  })
+
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
+    <FormModal
       title="Setujui Cuti"
-      size="md"
-      styles={{ title: MODAL_TITLE }}
+      submitLabel="Konfirmasi Persetujuan"
+      formError={formError}
+      isPending={isPending}
+      onSubmit={submit}
+      onClose={onClose}
     >
-      <Stack gap="md">
-        <div className="grid-2">
-          <Field label="Periode" value={periodLabel(leave)} />
-          <Field label="Durasi" value={durationLabel(leave)} />
-          <Field label="Posisi kelas saat cuti" value={leave.position} />
-          <Field
-            label="Rencana kembali"
-            value={leave.returnDate ? formatDateLong(leave.returnDate) : "Belum ditetapkan"}
-          />
-        </div>
-        <Notice tone="success">
-          Status {leave.student.name} berubah menjadi Cuti. Ia keluar dari anggota kelas, absensi
-          dan tagihan berhenti, akun portal tetap terbuka tanpa aksi. Pembayaran yang masuk tetap
-          membuka gerbang layanan.
-        </Notice>
-        <Group justify="flex-end">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Batal
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              notifications.show({
-                message: `Cuti ${leave.student.name} disetujui. Tercatat di Log Aktivitas dan Riwayat Cuti siswa.`,
-              })
-              onClose()
-            }}
-          >
-            Konfirmasi Persetujuan
-          </button>
-        </Group>
-      </Stack>
-    </Modal>
+      <div className="grid-2">
+        <Field
+          label="Periode"
+          value={`${formatDateLong(leave.startsOn)} - ${formatDateLong(leave.returnsOn)}`}
+        />
+        <Field label="Durasi" value={`${leaveMonths(leave.startsOn, leave.returnsOn)} bulan`} />
+        <Field
+          label="Posisi kelas saat ini"
+          value={[leave.position.className, positionLabel(leave.position)]
+            .filter(Boolean)
+            .join(" · ")}
+        />
+        <Field label="Rencana kembali" value={formatDateLong(leave.returnsOn)} />
+      </div>
+      <Notice tone="success">
+        Status {leave.student.name} berubah menjadi Cuti pada {formatDateLong(leave.startsOn)}. Saat
+        itu ia keluar dari anggota kelas, posisi kurikulumnya dibekukan, dan tagihan berhenti.
+        Pembayaran yang masuk tetap membuka gerbang layanan.
+      </Notice>
+    </FormModal>
   )
 }
 
-export function FinalApproval({ leave }: { leave: StaffLeave }) {
+export function FinalApproval({ leave, canDecide }: { leave: LeaveDetail; canDecide: boolean }) {
   const [dialog, setDialog] = useState<"approve" | "reject" | null>(null)
-
-  const finance = leave.finance
-  const obligation = finance
-    ? moneyShortfall(finance.minimumBeforeLeave, finance.totalPaid)
-    : idr(0)
+  const close = () => setDialog(null)
+  const { verifiedBy, verifiedAt } = leave.finance
 
   return (
     <>
@@ -89,33 +76,35 @@ export function FinalApproval({ leave }: { leave: StaffLeave }) {
             label="Status Keuangan"
             value={<span className="badge badge-beres">Pembayaran Diverifikasi</span>}
           />
+          <Field label="Total Kewajiban" value={obligationLabel(leave)} />
           <Field
-            label="Total Kewajiban"
-            value={obligation.amount > 0 ? formatMoney(obligation) : "Tidak ada tagihan tambahan"}
+            label="Verifikasi oleh"
+            value={verifiedBy ?? (verifiedAt ? "Otomatis dari pembayaran" : "-")}
           />
-          <Field label="Verifikasi oleh" value={leave.financeVerifier ?? "-"} />
-          <Field
-            label="Diverifikasi pada"
-            value={leave.verifiedAt ? formatDateTime(leave.verifiedAt) : "-"}
-          />
+          <Field label="Diverifikasi pada" value={verifiedAt ? formatDateTime(verifiedAt) : "-"} />
         </div>
-        <div className="row row-wrap" style={{ gap: 8 }}>
-          <button type="button" className="btn btn-primary" onClick={() => setDialog("approve")}>
-            Setujui Cuti
-          </button>
-          <button type="button" className="btn btn-danger" onClick={() => setDialog("reject")}>
-            Tolak Pengajuan Cuti
-          </button>
-        </div>
+        {canDecide ? (
+          <div className="row row-wrap" style={{ gap: 8 }}>
+            <button type="button" className="btn btn-primary" onClick={() => setDialog("approve")}>
+              Setujui Cuti
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => setDialog("reject")}>
+              Tolak Pengajuan Cuti
+            </button>
+          </div>
+        ) : (
+          <span className="caption text-muted">Keputusan tahap ini dikerjakan Admission.</span>
+        )}
       </Panel>
 
-      <ApproveModal leave={leave} opened={dialog === "approve"} onClose={() => setDialog(null)} />
-      <RejectModal
-        leave={leave}
-        stageLabel="Persetujuan Akhir"
-        opened={dialog === "reject"}
-        onClose={() => setDialog(null)}
-      />
+      {dialog === "approve" && <ApproveModal leave={leave} onClose={close} />}
+      {dialog === "reject" && (
+        <RejectModal
+          leave={leave}
+          reject={(values) => decideApproval(leave.id, { decision: "reject", ...values })}
+          onClose={close}
+        />
+      )}
     </>
   )
 }

@@ -1,167 +1,148 @@
 "use client"
 
-import { Search01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Select, TextInput } from "@mantine/core"
 import Link from "next/link"
-import { useState } from "react"
 
-import { DataTable, type DataColumn } from "@/src/components/data/DataTable"
-
-import { type Registration, REGISTRATION_COLUMNS, registrationOf } from "./registration"
+import { ListFilter } from "@/src/components/data/ListFilter"
+import { ListSearch } from "@/src/components/data/ListSearch"
+import { QueryError } from "@/src/components/data/QueryError"
+import { ServerDataTable } from "@/src/components/data/ServerDataTable"
+import type { DataColumn } from "@/src/components/data/TableFrame"
+import { studentFilterOptionsQuery, studentsQuery } from "@/src/entities/student/queries"
 import {
-  completenessLabel,
-  type FilterKey,
-  filterOptions,
-  FILTERS,
+  CANDIDATE_STATUS,
+  FUNNEL_STAGES,
   STATUS_BADGE,
-  type Student,
-  STUDENTS,
-} from "./sample"
+  STUDENT_FILTERS,
+  STUDENT_STATUSES,
+  type StudentFilterOptions,
+  type StudentListRow,
+} from "@/src/entities/student/schema"
+import { useRead } from "@/src/lib/api/use-read"
+import { useListParams } from "@/src/lib/use-list-params"
 
-type Filters = Readonly<Partial<Record<FilterKey, string>>>
+const DASH = "-"
 
-type Row = Student & { readonly reg: Registration }
+type Choice = { value: string; label: string }
 
-const matchesQuery = (s: Student, query: string) =>
-  query === "" ||
-  `${s.name} ${s.nis} ${s.contractNumber}`.toLowerCase().includes(query.toLowerCase())
+const choicesFrom = (values: readonly string[]): Choice[] =>
+  values.map((value) => ({ value, label: value }))
 
-const matchesFilters = (s: Student, filters: Filters) =>
-  FILTERS.every(({ key }) => !filters[key] || s[key] === filters[key])
+const FILTER_FIELDS: readonly {
+  name: (typeof STUDENT_FILTERS)[number]
+  label: string
+  options: keyof StudentFilterOptions | Choice[]
+}[] = [
+  { name: "branch", label: "cabang", options: "branches" },
+  { name: "program", label: "program", options: "programs" },
+  { name: "major", label: "jurusan", options: "majors" },
+  {
+    name: "status",
+    label: "status",
+    options: choicesFrom([...STUDENT_STATUSES, CANDIDATE_STATUS]),
+  },
+  { name: "stage", label: "tahap", options: choicesFrom(FUNNEL_STAGES.slice(1)) },
+  { name: "level", label: "level", options: "levels" },
+  { name: "package", label: "paket", options: "packages" },
+  { name: "pic", label: "PIC", options: "pics" },
+  { name: "leadSource", label: "sumber lead", options: "leadSources" },
+]
+
+const COLUMNS: readonly DataColumn<StudentListRow>[] = [
+  {
+    key: "name",
+    header: "Nama",
+    sortKey: "name",
+    cell: (s) => (
+      <div className="stack" style={{ gap: 0 }}>
+        {s.nis ? (
+          <Link
+            href={`/staff/students/${encodeURIComponent(s.nis)}`}
+            className="text-ink no-underline hover:underline"
+            style={{ fontWeight: 600, whiteSpace: "nowrap" }}
+          >
+            {s.name}
+          </Link>
+        ) : (
+          <span className="text-ink" style={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+            {s.name}
+          </span>
+        )}
+        <span className="caption text-muted tabular">
+          {s.nis ? `NIS ${s.nis}` : "NIS terbit setelah DP disahkan"}
+        </span>
+      </div>
+    ),
+  },
+  {
+    key: "contract",
+    header: "No Kontrak",
+    cell: (s) => <span className="tabular">{s.contractNumber ?? DASH}</span>,
+  },
+  { key: "branch", header: "Cabang", cell: (s) => s.branch.name },
+  { key: "program", header: "Program", cell: (s) => s.program?.name ?? DASH },
+  {
+    key: "status",
+    header: "Status",
+    cell: (s) => <span className={`badge ${STATUS_BADGE[s.status]}`}>{s.status}</span>,
+  },
+  {
+    key: "level",
+    header: "Level",
+    cell: (s) => (s.level ? <span className="badge">{s.level.name}</span> : DASH),
+  },
+  { key: "pic", header: "PIC", cell: (s) => s.pic?.name ?? DASH },
+  {
+    key: "completeness",
+    header: "Kelengkapan",
+    cell: (s) => (
+      <span className={`badge ${s.completeness === "Lengkap" ? "badge-beres" : "badge-tindakan"}`}>
+        {s.completeness}
+      </span>
+    ),
+  },
+]
 
 export function StudentsTable() {
-  const [query, setQuery] = useState("")
-  const [filters, setFilters] = useState<Filters>({})
+  const { params } = useListParams(STUDENT_FILTERS)
+  const students = useRead(studentsQuery(params))
+  const options = useRead(studentFilterOptionsQuery())
 
-  const rows: readonly Row[] = STUDENTS.map((s, i) => ({ ...s, reg: registrationOf(s, i) })).filter(
-    (s) => matchesQuery(s, query) && matchesFilters(s, filters),
-  )
-  const activeFilterCount = Object.values(filters).filter(Boolean).length
-
-  // Kolom mengikuti urutan formulir /register; NIS dan Nama di depan supaya baris
-  // tetap terbaca saat menggulir mendatar, keadaan sistem (status, level,
-  // kelengkapan) di ujung.
-  const columns: readonly DataColumn<Row>[] = [
-    {
-      key: "nis",
-      header: "NIS",
-      sort: (s) => s.nis,
-      cell: (s) => <span className="tabular">{s.nis}</span>,
-    },
-    {
-      key: "name",
-      header: "Nama Lengkap",
-      sort: (s) => s.name,
-      cell: (s) => (
-        <Link
-          href={`/staff/students/${s.nis}`}
-          className="text-ink no-underline hover:underline"
-          style={{ fontWeight: 600, whiteSpace: "nowrap" }}
-        >
-          {s.name}
-        </Link>
-      ),
-    },
-    {
-      key: "contract",
-      header: "No Kontrak",
-      sort: (s) => s.contractNumber,
-      cell: (s) => <span className="tabular">{s.contractNumber}</span>,
-    },
-    ...REGISTRATION_COLUMNS.map(({ key, header }): DataColumn<Row> => ({
-      key,
-      header,
-      sort: (s) => s.reg[key],
-      cell: (s) =>
-        key === "signatureFile" ? (
-          <a className="link" href={`/files/${s.reg[key]}`} target="_blank" rel="noopener">
-            {s.reg[key]}
-          </a>
-        ) : (
-          <span style={{ whiteSpace: "nowrap" }}>{s.reg[key]}</span>
-        ),
-    })),
-    {
-      key: "status",
-      header: "Status",
-      sort: (s) => s.status,
-      cell: (s) => <span className={`badge ${STATUS_BADGE[s.status]}`}>{s.status}</span>,
-    },
-    {
-      key: "level",
-      header: "Level",
-      sort: (s) => s.level,
-      cell: (s) => <span className="badge">{s.level}</span>,
-    },
-    {
-      key: "completeness",
-      header: "Kelengkapan",
-      sort: (s) => s.missingFields,
-      cell: (s) => (
-        <span className={`badge ${s.missingFields === 0 ? "badge-beres" : "badge-tindakan"}`}>
-          {completenessLabel(s)}
-        </span>
-      ),
-    },
-  ]
+  const choicesOf = (source: keyof StudentFilterOptions | Choice[]) =>
+    Array.isArray(source)
+      ? source
+      : (options.data?.[source] ?? []).map((item) => ({ value: item.id, label: item.name }))
 
   return (
     <section className="card stack">
-      <div className="row row-wrap" style={{ gap: 8 }}>
-        <TextInput
-          aria-label="Cari siswa"
-          placeholder="Cari nama, NIS, No Kontrak"
-          size="sm"
-          leftSection={<HugeiconsIcon icon={Search01Icon} size={16} strokeWidth={1.5} />}
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          style={{ flex: "1 1 240px", maxWidth: 320 }}
-        />
-        {FILTERS.map(({ key, label }) => (
-          <Select
-            key={key}
-            aria-label={`Saring ${label}`}
-            placeholder={label}
-            size="sm"
-            w={label.length * 8 + 60}
-            comboboxProps={{ width: 220, position: "bottom-start" }}
-            data={[...filterOptions(key)]}
-            value={filters[key] ?? null}
-            onChange={(value) =>
-              setFilters((current) => ({ ...current, [key]: value ?? undefined }))
-            }
-            clearable
-          />
-        ))}
-        <div className="row" style={{ gap: 8, marginInlineStart: "auto" }}>
-          <span className="caption text-muted tabular">
-            {rows.length === STUDENTS.length
-              ? `${STUDENTS.length} siswa`
-              : `${rows.length} dari ${STUDENTS.length} siswa`}
-          </span>
-          {(activeFilterCount > 0 || query !== "") && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setFilters({})
-                setQuery("")
-              }}
-            >
-              Hapus saringan
-            </button>
-          )}
-        </div>
+      <div className="row">
+        <h2 className="h5">Daftar Siswa</h2>
+        {students.data && <span className="pill tabular">{students.data.meta.total} siswa</span>}
       </div>
 
-      <DataTable
-        rows={rows}
-        columns={columns}
-        rowKey={(s) => s.nis}
-        defaultSort={{ key: "name", dir: "asc" }}
-        emptyText="Tidak ada siswa yang cocok dengan pencarian atau saringan."
-      />
+      <div className="row row-wrap" style={{ gap: 8 }}>
+        <ListSearch label="Cari nama, NIS, NIK, No Kontrak" />
+        {FILTER_FIELDS.map((field) => (
+          <ListFilter
+            key={field.name}
+            name={field.name}
+            label={field.label}
+            options={choicesOf(field.options)}
+          />
+        ))}
+      </div>
+
+      {students.isError ? (
+        <QueryError message={students.error.message} onRetry={() => void students.refetch()} />
+      ) : (
+        <ServerDataTable
+          rows={students.data?.data ?? []}
+          total={students.data?.meta.total ?? 0}
+          isPending={students.isPending}
+          columns={COLUMNS}
+          rowKey={(s) => s.id}
+          emptyText="Tidak ada siswa yang cocok dengan pencarian atau saringan."
+        />
+      )}
     </section>
   )
 }

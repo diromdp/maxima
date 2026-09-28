@@ -1,75 +1,82 @@
 "use client"
 
-import { Modal, NumberInput, Select, TextInput } from "@mantine/core"
+import { NumberInput, Select, TextInput } from "@mantine/core"
 import { DateInput, DatesProvider } from "@mantine/dates"
+import { schemaResolver, useForm } from "@mantine/form"
 
-import { notify } from "@/src/lib/notify"
+import { FormModal } from "@/src/components/ui/FormModal"
+import { createExamSchedule } from "@/src/entities/certificate/actions"
+import { SCHEDULE_KEYS } from "@/src/entities/certificate/queries"
+import { scheduleFormSchema, type ScheduleForm } from "@/src/entities/certificate/schema"
+import { useActionForm } from "@/src/lib/use-action-form"
 
-import { CERTIFICATE_KINDS, LEVELS } from "./sample"
+import { useExamOptions } from "./use-exam-options"
 
-const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
+export function ScheduleFormModal({ onClose }: { onClose: () => void }) {
+  const { levels, kinds } = useExamOptions()
+  const form = useForm<ScheduleForm>({
+    initialValues: { kindId: "", levelId: "", date: "", location: "", capacity: "" },
+    validate: schemaResolver(scheduleFormSchema, { sync: true }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) =>
+      createExamSchedule({ ...values, capacity: values.capacity === "" ? 0 : values.capacity }),
+    successMessage: "Jadwal ujian disimpan dan tampil di Kalender Akademik.",
+    invalidates: [...SCHEDULE_KEYS, ["class-calendar"]],
+    onSuccess: onClose,
+  })
 
-export function ScheduleFormModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
+    <FormModal
       title="Tambah Jadwal Ujian"
-      size="md"
-      styles={TITLE_STYLE}
+      submitLabel="Simpan Jadwal"
+      formError={formError}
+      isPending={isPending}
+      onSubmit={submit}
+      onClose={onClose}
     >
-      <form
-        className="stack stack-lg"
-        onSubmit={(event) => {
-          event.preventDefault()
-          notify.success("Jadwal ujian disimpan dan tampil di Kalender Akademik.")
-          onClose()
-        }}
-      >
-        <div className="grid-2">
-          <Select
-            name="kind"
-            label="Penyelenggara"
-            placeholder="Pilih"
-            data={[...CERTIFICATE_KINDS]}
-            required
-          />
-          <Select
-            name="level"
-            label="Level"
-            placeholder="Pilih level"
-            data={[...LEVELS]}
-            required
-          />
-        </div>
-        <DatesProvider settings={{ locale: "id" }}>
-          <DateInput
-            name="date"
-            label="Tanggal Ujian"
-            placeholder="Pilih tanggal"
-            valueFormat="DD MMM YYYY"
-            required
-          />
-        </DatesProvider>
-        <TextInput name="location" label="Lokasi" placeholder="Pusat Jakarta" required />
-        <NumberInput
-          name="capacity"
-          label="Kuota"
-          description="Pendaftaran di atas kuota butuh konfirmasi."
-          placeholder="30"
-          min={1}
-          allowDecimal={false}
-          required
+      <div className="grid-2">
+        <Select
+          label="Penyelenggara"
+          placeholder="Pilih"
+          withAsterisk
+          data={[...kinds]}
+          {...form.getInputProps("kindId")}
         />
-        <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Batal
-          </button>
-          <button type="submit" className="btn btn-primary">
-            Simpan Jadwal
-          </button>
-        </div>
-      </form>
-    </Modal>
+        <Select
+          label="Level"
+          placeholder="Pilih level"
+          withAsterisk
+          data={[...levels]}
+          {...form.getInputProps("levelId")}
+        />
+      </div>
+      <DatesProvider settings={{ locale: "id" }}>
+        <DateInput
+          label="Tanggal Ujian"
+          placeholder="Pilih tanggal"
+          valueFormat="DD MMM YYYY"
+          withAsterisk
+          {...form.getInputProps("date")}
+        />
+      </DatesProvider>
+      <TextInput
+        label="Lokasi"
+        placeholder="Pusat Jakarta"
+        withAsterisk
+        {...form.getInputProps("location")}
+      />
+      <NumberInput
+        label="Kuota"
+        description="Pendaftaran di atas kuota butuh konfirmasi."
+        placeholder="30"
+        min={1}
+        max={500}
+        allowDecimal={false}
+        withAsterisk
+        {...form.getInputProps("capacity")}
+      />
+    </FormModal>
   )
 }

@@ -1,6 +1,6 @@
 import { Skeleton } from "@mantine/core"
 
-import { SERVICE_COLUMNS } from "../sample"
+const SERVICE_ROWS = 9
 
 export default function Loading() {
   return (
@@ -20,8 +20,8 @@ export default function Loading() {
 
       <section className="card stack" aria-hidden>
         <div className="stack stack-sm">
-          {SERVICE_COLUMNS.map((column) => (
-            <Skeleton key={column.id} height={52} radius="sm" />
+          {Array.from({ length: SERVICE_ROWS }, (_, index) => (
+            <Skeleton key={index} height={52} radius="sm" />
           ))}
         </div>
       </section>

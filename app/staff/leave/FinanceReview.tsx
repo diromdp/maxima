@@ -1,236 +1,221 @@
 "use client"
 
-import { Group, Modal, NumberInput, Stack, Textarea } from "@mantine/core"
+import { NumberInput, Textarea } from "@mantine/core"
 import { DateInput, DatesProvider } from "@mantine/dates"
-import { notifications } from "@mantine/notifications"
+import { schemaResolver, useForm } from "@mantine/form"
 import { useState } from "react"
 
+import { FormModal } from "@/src/components/ui/FormModal"
 import { Notice } from "@/src/components/ui/Notice"
-import { formatMoney, idr, shortfall as moneyShortfall } from "@/src/lib/money"
+import { assessFinance } from "@/src/entities/leave/actions"
+import { type LeaveDetail, obligationFormSchema } from "@/src/entities/leave/schema"
+import { formatMoney, idr } from "@/src/lib/money"
+import { useActionForm } from "@/src/lib/use-action-form"
 
 import { Field, Panel } from "./LeavePanels"
 import { RejectModal } from "./RejectModal"
-import type { StaffLeave } from "./sample"
-
-const MODAL_TITLE = { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 }
 
 type Dialog = "obligation" | "sufficient" | "reject" | null
 
-function assessment(leave: StaffLeave) {
-  const totalPaid = leave.finance?.totalPaid ?? idr(0)
-  const minimum = leave.finance?.minimumBeforeLeave ?? idr(0)
-  return { totalPaid, minimum, due: moneyShortfall(minimum, totalPaid) }
+type ObligationValues = { amountIdr: number | string; deadline: string | null; note: string }
+
+function FinanceFigures({ leave }: { leave: LeaveDetail }) {
+  const { paidIdr, minimumIdr } = leave.finance
+  return (
+    <div className="grid-3">
+      <Field label="Siswa" value={`${leave.student.name} · ${leave.student.nis ?? "-"}`} />
+      <Field label="Total Pembayaran" value={formatMoney(idr(paidIdr))} />
+      <Field label="Cicilan Minimum" value={formatMoney(idr(minimumIdr))} />
+    </div>
+  )
 }
 
 function ObligationModal({
   leave,
-  opened,
-  onClose,
   note,
+  onClose,
 }: {
-  leave: StaffLeave
-  opened: boolean
-  onClose: () => void
+  leave: LeaveDetail
   note: string
+  onClose: () => void
 }) {
-  const { totalPaid, minimum, due } = assessment(leave)
-  const [amount, setAmount] = useState<number | string>(due.amount)
-  const [deadline, setDeadline] = useState<Date | null>(null)
-
-  const missing = [
-    Number(amount) > 0 ? null : "isi nominal",
-    deadline ? null : "tetapkan batas pembayaran",
-    note.trim() ? null : "tulis catatan Finance",
-  ].filter((item): item is string => item !== null)
+  const shortfall = leave.finance.shortfallIdr
+  const form = useForm<ObligationValues>({
+    initialValues: { amountIdr: shortfall > 0 ? shortfall : "", deadline: null, note },
+    validate: schemaResolver(obligationFormSchema, { sync: true }),
+  })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: (values) =>
+      assessFinance(leave.id, {
+        decision: "set-obligation",
+        ...obligationFormSchema.parse(values),
+      }),
+    successMessage: `Kewajiban dikirim ke ${leave.student.name}. Pengajuan pindah ke Menunggu Pembayaran.`,
+    invalidates: [["leaves"]],
+    onSuccess: onClose,
+  })
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
+    <FormModal
       title="Tetapkan Kewajiban Pembayaran"
       size="lg"
-      styles={{ title: MODAL_TITLE }}
+      submitLabel="Konfirmasi & Kirim"
+      formError={formError}
+      isPending={isPending}
+      onSubmit={submit}
+      onClose={onClose}
     >
-      <Stack gap="md">
-        <span className="body-sm text-muted">
-          Kirim kewajiban ke siswa. Pengajuan pindah ke tahap 3, siswa melihat nominal dan batas
-          waktunya di portal, lalu membayar lewat halaman Pembayaran.
-        </span>
-        <div className="grid-3">
-          <Field label="Siswa" value={`${leave.student.name} · ${leave.student.nis}`} />
-          <Field label="Total Pembayaran" value={formatMoney(totalPaid)} />
-          <Field label="Cicilan Minimum" value={formatMoney(minimum)} />
-        </div>
-        <div className="grid-2">
-          <NumberInput
-            label="Kekurangan yang ditagih"
-            description={`Selisih terhitung ${formatMoney(due)}.`}
-            prefix="Rp "
-            thousandSeparator="."
-            decimalSeparator=","
-            hideControls
-            min={0}
-            value={amount}
-            onChange={setAmount}
+      <span className="body-sm text-muted">
+        Siswa melihat nominal dan batas waktunya di portal, lalu membayar lewat halaman Pembayaran
+        portal.
+      </span>
+      <FinanceFigures leave={leave} />
+      <div className="grid-2">
+        <NumberInput
+          label="Selisih yang ditagih"
+          description={`Selisih terhitung ${formatMoney(idr(shortfall))}.`}
+          prefix="Rp "
+          thousandSeparator="."
+          decimalSeparator=","
+          hideControls
+          min={1}
+          allowDecimal={false}
+          withAsterisk
+          {...form.getInputProps("amountIdr")}
+        />
+        <DatesProvider settings={{ locale: "id" }}>
+          <DateInput
+            label="Batas Pembayaran"
+            description="Berlaku sampai pukul 23.59 WIB. Lewat itu pengajuan gugur."
+            placeholder="Pilih tanggal"
+            valueFormat="DD MMMM YYYY"
+            minDate={new Date()}
+            withAsterisk
+            {...form.getInputProps("deadline")}
           />
-          <DatesProvider settings={{ locale: "id" }}>
-            <DateInput
-              label="Batas Pembayaran"
-              description="Lewat batas ini pengajuan gugur, siswa mengajukan ulang."
-              placeholder="Pilih tanggal"
-              valueFormat="DD MMM YYYY"
-              minDate={new Date()}
-              value={deadline}
-              onChange={(value) => setDeadline(value ? new Date(value) : null)}
-            />
-          </DatesProvider>
-        </div>
-        <Field label="Catatan Finance" value={note || "-"} />
-        <Group justify="space-between" wrap="wrap">
-          <span className="caption text-muted">
-            {missing.length > 0
-              ? `Sebelum kirim: ${missing.join(", ")}.`
-              : "Siswa langsung diberi tahu."}
-          </span>
-          <Group>
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Batal
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={missing.length > 0}
-              onClick={() => {
-                notifications.show({
-                  message: `Kewajiban ${formatMoney(idr(Number(amount)))} dikirim ke ${leave.student.name}. Pengajuan pindah ke Pembayaran Ditetapkan.`,
-                })
-                onClose()
-              }}
-            >
-              Konfirmasi & Kirim
-            </button>
-          </Group>
-        </Group>
-      </Stack>
-    </Modal>
+        </DatesProvider>
+      </div>
+      <Textarea
+        label="Catatan Finance"
+        description="Ikut terkirim ke siswa bersama kewajibannya."
+        autosize
+        minRows={2}
+        withAsterisk
+        {...form.getInputProps("note")}
+      />
+    </FormModal>
   )
 }
 
 function SufficientModal({
   leave,
-  opened,
+  note,
   onClose,
 }: {
-  leave: StaffLeave
-  opened: boolean
+  leave: LeaveDetail
+  note: string
   onClose: () => void
 }) {
-  const { totalPaid, minimum, due } = assessment(leave)
+  const form = useForm({ initialValues: {} })
+  const { submit, isPending, formError } = useActionForm({
+    form,
+    action: () =>
+      assessFinance(leave.id, { decision: "sufficient", note: note.trim() || undefined }),
+    successMessage: `${leave.student.name} diteruskan ke Persetujuan Akhir tanpa tagihan tambahan.`,
+    invalidates: [["leaves"]],
+    onSuccess: onClose,
+  })
+  const shortfall = leave.finance.shortfallIdr
+
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
+    <FormModal
       title="Pembayaran Sudah Mencukupi"
-      size="md"
-      styles={{ title: MODAL_TITLE }}
+      submitLabel="Setujui Verifikasi Finance"
+      formError={formError}
+      isPending={isPending}
+      onSubmit={submit}
+      onClose={onClose}
     >
-      <Stack gap="md">
-        <div className="grid-3">
-          <Field label="Siswa" value={leave.student.name} />
-          <Field label="Total Pembayaran" value={formatMoney(totalPaid)} />
-          <Field label="Cicilan Minimum" value={formatMoney(minimum)} />
-        </div>
-        <Notice tone={due.amount === 0 ? "success" : "warning"}>
-          {due.amount === 0
-            ? "Siswa tidak perlu menyetor tambahan. Pengajuan melompati tahap pembayaran dan diteruskan ke Persetujuan Akhir."
-            : `Selisih terhitung masih ${formatMoney(due)}. Meneruskan berarti Finance menanggung selisihnya sebagai kebijakan.`}
-        </Notice>
-        <Group justify="flex-end">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Batal
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              notifications.show({
-                message: `${leave.student.name} diteruskan ke Persetujuan Akhir tanpa tagihan tambahan.`,
-              })
-              onClose()
-            }}
-          >
-            Setujui Verifikasi Finance
-          </button>
-        </Group>
-      </Stack>
-    </Modal>
+      <FinanceFigures leave={leave} />
+      <Notice tone={shortfall === 0 ? "success" : "warning"}>
+        {shortfall === 0
+          ? "Siswa tidak perlu menyetor tambahan. Pengajuan melompati tahap pembayaran dan diteruskan ke Persetujuan Akhir."
+          : `Selisih terhitung masih ${formatMoney(idr(shortfall))}. Meneruskan berarti Finance menanggung selisihnya sebagai kebijakan.`}
+      </Notice>
+    </FormModal>
   )
 }
 
-export function FinanceReview({ leave }: { leave: StaffLeave }) {
+export function FinanceReview({ leave, canDecide }: { leave: LeaveDetail; canDecide: boolean }) {
   const [dialog, setDialog] = useState<Dialog>(null)
-  const [note, setNote] = useState(leave.financeNote ?? "")
-  const { totalPaid, minimum, due } = assessment(leave)
+  const [note, setNote] = useState(leave.finance.note ?? "")
+  const { paidIdr, minimumIdr, shortfallIdr } = leave.finance
+  const close = () => setDialog(null)
 
   return (
     <>
       <Panel title="Penilaian Pembayaran">
         <div className="grid-3">
-          <Field label="Total Pembayaran" value={formatMoney(totalPaid)} />
-          <Field label="Cicilan Minimum sebelum cuti" value={formatMoney(minimum)} />
+          <Field label="Total Pembayaran" value={formatMoney(idr(paidIdr))} />
+          <Field label="Cicilan Minimum sebelum cuti" value={formatMoney(idr(minimumIdr))} />
           <div className="stack" style={{ gap: 2 }}>
             <span className="caption text-muted">Selisih / Kekurangan</span>
-            <span className={`h5 tabular${due.amount > 0 ? " text-danger" : " text-success"}`}>
-              {due.amount > 0 ? formatMoney(due) : "Mencukupi"}
+            <span className={`h5 tabular ${shortfallIdr > 0 ? "text-danger" : "text-success"}`}>
+              {shortfallIdr > 0 ? formatMoney(idr(shortfallIdr)) : "Mencukupi"}
             </span>
           </div>
         </div>
-        <Textarea
-          label="Catatan Finance"
-          description="Ikut terkirim ke siswa bersama kewajibannya. Cara membayar sudah ada di halaman Pembayaran, tulis di sini hanya yang khusus untuk pengajuan ini."
-          placeholder="Contoh: pembayaran belum mencapai cicilan minimum sebelum cuti."
-          autosize
-          minRows={3}
-          value={note}
-          onChange={(event) => setNote(event.currentTarget.value)}
-        />
-        <div className="row row-wrap" style={{ gap: 8 }}>
-          <button type="button" className="btn btn-primary" onClick={() => setDialog("obligation")}>
-            Tetapkan Kewajiban Pembayaran
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setDialog("sufficient")}
-          >
-            Pembayaran Sudah Mencukupi
-          </button>
-          <button type="button" className="btn btn-danger" onClick={() => setDialog("reject")}>
-            Tolak
-          </button>
-        </div>
-        <span className="caption text-muted">
-          Kekurangan lebih dari nol: tetapkan kewajiban. Sudah cukup: teruskan ke Persetujuan Akhir.
-        </span>
+        {canDecide ? (
+          <>
+            <Textarea
+              label="Catatan Finance"
+              description="Ikut terkirim ke siswa bersama kewajibannya. Cara membayar sudah ada di halaman Pembayaran portal, tulis di sini hanya yang khusus untuk pengajuan ini."
+              placeholder="Contoh: pembayaran belum mencapai cicilan minimum sebelum cuti."
+              autosize
+              minRows={3}
+              value={note}
+              onChange={(event) => setNote(event.currentTarget.value)}
+            />
+            <div className="row row-wrap" style={{ gap: 8 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setDialog("obligation")}
+              >
+                Tetapkan Kewajiban Pembayaran
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setDialog("sufficient")}
+              >
+                Pembayaran Sudah Mencukupi
+              </button>
+              <button type="button" className="btn btn-danger" onClick={() => setDialog("reject")}>
+                Tolak
+              </button>
+            </div>
+            <span className="caption text-muted">
+              Ada kekurangan: tetapkan kewajiban. Sudah cukup: teruskan ke Persetujuan Akhir.
+            </span>
+          </>
+        ) : (
+          <span className="caption text-muted">
+            Keputusan tahap ini dikerjakan Staf Finance atau Manajer Finance.
+          </span>
+        )}
       </Panel>
 
-      <ObligationModal
-        leave={leave}
-        note={note}
-        opened={dialog === "obligation"}
-        onClose={() => setDialog(null)}
-      />
-      <SufficientModal
-        leave={leave}
-        opened={dialog === "sufficient"}
-        onClose={() => setDialog(null)}
-      />
-      <RejectModal
-        leave={leave}
-        stageLabel="Verifikasi Finance"
-        opened={dialog === "reject"}
-        onClose={() => setDialog(null)}
-      />
+      {dialog === "obligation" && <ObligationModal leave={leave} note={note} onClose={close} />}
+      {dialog === "sufficient" && <SufficientModal leave={leave} note={note} onClose={close} />}
+      {dialog === "reject" && (
+        <RejectModal
+          leave={leave}
+          reject={(values) => assessFinance(leave.id, { decision: "reject", ...values })}
+          onClose={close}
+        />
+      )}
     </>
   )
 }
