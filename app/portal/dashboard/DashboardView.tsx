@@ -67,7 +67,7 @@ type Step = {
   action: { label: string; href: string } | null
 }
 
-function stepOf(step: NextStep): Step {
+function stepOf(step: NextStep): Step | null {
   const current = "Langkah Anda sekarang"
   switch (step.kind) {
     case "activate":
@@ -112,6 +112,8 @@ function stepOf(step: NextStep): Step {
           : "Setelah pembayaran masuk, sisa tagihan paket Anda ikut berkurang.",
         action: { label: "Bayar Sekarang", href: "/portal/payments" },
       }
+    case "upcoming":
+      return null
     case "none":
       return {
         tone: "beres",
@@ -346,7 +348,7 @@ function PaymentsCard({
         </div>
       )}
 
-      {nextStep.kind === "pay" && nextStep.dueOn && (
+      {(nextStep.kind === "pay" || nextStep.kind === "upcoming") && nextStep.dueOn && (
         <span className="caption text-muted">
           {nextPaymentLabelOf(nextStep.installment)} jatuh tempo {formatDate(nextStep.dueOn)}.
         </span>
@@ -441,6 +443,7 @@ export function DashboardView() {
   const view = dashboard.data
   const { student } = view.head
   const isActivated = view.numbers !== null
+  const step = stepOf(view.nextStep)
 
   return (
     <div className="stack stack-lg">
@@ -454,7 +457,7 @@ export function DashboardView() {
         subtitle={identityOf(view)}
       />
 
-      <StepPanel step={stepOf(view.nextStep)} />
+      {step && <StepPanel step={step} />}
 
       {view.numbers && (
         <NumberCards numbers={view.numbers} showsAttendance={student.status !== "Cuti"} />

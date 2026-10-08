@@ -109,6 +109,7 @@ export type NextStep =
       dueOn: string | null
       opensService: string | null
     }
+  | { kind: "upcoming"; installment: NextPayment; dueOn: string | null }
   | { kind: "none" }
 
 export type PortalDashboard = {
