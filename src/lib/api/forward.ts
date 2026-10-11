@@ -8,6 +8,10 @@ import { apiResponse } from "./client"
 const SESSION_ENDED = "Sesi kamu sudah berakhir. Silakan masuk kembali."
 const INVALID_PATH = "Alamat data tidak dikenal."
 const PASSED_HEADERS = ["Content-Type", "Content-Disposition"] as const
+const POSTABLE_PATHS = [
+  /^downloads\/presign$/,
+  /^print\/students\/[^/]+\/(active|progress)-letter$/,
+] as const
 
 const failure = (status: number, error: string, message: string) =>
   NextResponse.json({ error, message, details: [] }, { status })
@@ -17,7 +21,12 @@ export async function forward(
   segments: readonly string[],
   method: "GET" | "POST",
 ): Promise<Response> {
-  if (segments.some((segment) => segment === "." || segment === ".." || segment.includes("/"))) {
+  const isUnsafeSegment = segments.some(
+    (segment) => segment === "." || segment === ".." || segment.includes("/"),
+  )
+  const isUnpostable =
+    method === "POST" && !POSTABLE_PATHS.some((pattern) => pattern.test(segments.join("/")))
+  if (isUnsafeSegment || isUnpostable) {
     return failure(404, "Not Found", INVALID_PATH)
   }
   if (!(await cookies()).get(ACCESS_COOKIE)) return failure(401, "Unauthorized", SESSION_ENDED)

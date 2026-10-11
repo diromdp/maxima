@@ -81,8 +81,8 @@ export default function KitPage() {
           <p className="label text-muted">Pustaka kelas</p>
           <h1>Maxima design kit.</h1>
           <p className="body-lg text-muted" style={{ maxWidth: "62ch" }}>
-            Semua kelas diturunkan dari design.md. Panggil kelasnya, jangan menulis ulang nilainya —
-            kalau sebuah hex muncul di dalam komponen, ia salah tempat.
+            Semua kelas diturunkan dari design.md. Panggil kelasnya, jangan menulis ulang nilainya.
+            Kalau sebuah hex muncul di dalam komponen, ia salah tempat.
           </p>
         </header>
 
@@ -112,12 +112,12 @@ export default function KitPage() {
             <p className="body-lg">Pasangan ringan untuk judul yang berat.</p>
           </Spec>
           <Spec name=".body / .body-sm">
-            <p className="body">Body 16 — copy default untuk paragraf dan isi kartu.</p>
-            <p className="body-sm text-muted">Body small 14 — copy pendukung dan sel tabel.</p>
+            <p className="body">Body 16, copy default untuk paragraf dan isi kartu.</p>
+            <p className="body-sm text-muted">Body small 14, copy pendukung dan sel tabel.</p>
           </Spec>
           <Spec name=".label / .caption">
             <p className="label">Label 12 · 600</p>
-            <p className="caption text-faint">Caption 12 — metadata dan cetakan kecil.</p>
+            <p className="caption text-faint">Caption 12, metadata dan cetakan kecil.</p>
           </Spec>
           <Spec name=".tabular" note="wajib di kolom angka">
             <p className="body tabular">Rp 45.000.000 · € 800 · 91% · 12 Feb 2025</p>
@@ -171,7 +171,7 @@ export default function KitPage() {
 
         <Section
           title="Status"
-          lead="Hijau baik, merah buruk, kuning berjalan, biru terbuka, abu terkunci — dan setiap warna berpasangan dengan katanya."
+          lead="Hijau baik, merah buruk, kuning berjalan, biru terbuka, abu terkunci, dan setiap warna berpasangan dengan katanya."
         >
           <Spec name=".badge-{nada}" note="isian lembut + garis senada">
             <div className="row row-wrap">
@@ -208,7 +208,7 @@ export default function KitPage() {
           </Spec>
           <Spec name=".text-{nada}" note="nominal kurang ditulis merah sebagai teks, bukan badge">
             <p className="body tabular text-danger">Kurang Rp 5.500.000 lagi</p>
-            <p className="body tabular text-success">Lunas — Rp 45.000.000</p>
+            <p className="body tabular text-success">Lunas Rp 45.000.000</p>
           </Spec>
         </Section>
 
@@ -436,8 +436,8 @@ export default function KitPage() {
           <div className="section-head">
             <h3>Grafik</h3>
             <p className="body-sm text-muted">
-              Seri yang diharapkan naik berwarna hijau, yang diharapkan turun merah — grafik terbaca
-              sebelum legendanya dibaca.
+              Seri yang diharapkan naik berwarna hijau, yang diharapkan turun merah, jadi grafik
+              terbaca sebelum legendanya dibaca.
             </p>
           </div>
 
@@ -540,7 +540,7 @@ export default function KitPage() {
           <Spec name=".only-mobile .hide-mobile .only-desktop" note="coba kecilkan jendelanya">
             <p className="body-sm only-mobile">Terlihat di mobile saja.</p>
             <p className="body-sm hide-mobile">Tersembunyi di mobile.</p>
-            <p className="body-sm only-desktop">Desktop saja — ≥ 1280px.</p>
+            <p className="body-sm only-desktop">Desktop saja, mulai 1280px.</p>
           </Spec>
         </Section>
       </main>

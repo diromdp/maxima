@@ -21,7 +21,7 @@ export const formatDateTime = (value: string | Date): string =>
   `${wib(value).format("DD MMM YYYY")} · ${wib(value).format("HH.mm")} WIB`
 
 export const formatDateRange = (from: string | Date, to: string | Date): string =>
-  `${formatDate(from)} — ${formatDate(to)}`
+  `${formatDate(from)} sampai ${formatDate(to)}`
 
 export const daysOverdue = (due: string | Date): number =>
   wib(new Date()).startOf("day").diff(wib(due).startOf("day"), "day")

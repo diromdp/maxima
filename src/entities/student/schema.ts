@@ -14,7 +14,6 @@ export const STUDENT_STATUSES: readonly StudentStatus[] = [
   "Mengundurkan Diri",
 ]
 
-// Calon yang sudah mengirim pendaftaran tetapi DP-nya belum berlaku, jadi belum ber-NIS.
 export const CANDIDATE_STATUS = "Tidak Aktif"
 
 export type StudentListStatus = StudentStatus | typeof CANDIDATE_STATUS

@@ -14,7 +14,6 @@ export function PageHeader({
   actions,
 }: {
   title: string
-  /** Badge di samping judul — status entitas yang halaman ini ceritakan. */
   badge?: React.ReactNode
   subtitle?: string
   breadcrumbs?: readonly Breadcrumb[]

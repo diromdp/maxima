@@ -33,7 +33,7 @@ $breakpoints: (
   }
 
   @if $min == 0 {
-    @error "`down(mobile)` tidak punya arti — mobile adalah dasarnya.";
+    @error "`down(mobile)` tidak punya arti, karena mobile adalah dasarnya.";
   }
 
   @media (max-width: $min - 0.02px) {

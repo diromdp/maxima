@@ -117,7 +117,7 @@ function PartnerCard() {
                 <div className="stack" style={{ gap: 2, minWidth: 0 }}>
                   <Text size="sm" fw={600}>
                     {application.partner.name}
-                    {application.position ? ` — ${application.position}` : ""}
+                    {application.position ? `, ${application.position}` : ""}
                   </Text>
                   <Text size="sm" c="dimmed">
                     Diajukan {formatDate(application.appliedOn)}
@@ -148,7 +148,7 @@ function PartnerCard() {
                 <div className="stack" style={{ gap: 2, minWidth: 0 }}>
                   <Text size="sm" fw={600}>
                     Latihan {practice.round}
-                    {practice.partner ? ` — ${practice.partner.name}` : ""}
+                    {practice.partner ? ` untuk ${practice.partner.name}` : ""}
                     {practice.position ? `, ${practice.position}` : ""}
                   </Text>
                   <Text size="sm" c="dimmed">

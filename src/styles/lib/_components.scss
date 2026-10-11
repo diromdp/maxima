@@ -314,8 +314,6 @@
     }
   }
 
-  // Kartu level A1-B2: warnanya keadaan — hijau lulus, kuning berjalan, abu
-  // belum mulai. Isian dan garis dari nada semantik; nama level tetap tinta.
   .level-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -368,9 +366,6 @@
     }
   }
 
-  // Garis perjalanan: N simpul sejajar, garis penghubung lewat ::before/::after
-  // supaya label sepanjang apa pun tidak memecah barisnya. Lingkaran penuh
-  // hijau = selesai, cincin kuning = dikerjakan, abu = menunggu.
   .journey {
     display: grid;
     grid-auto-flow: column;
@@ -392,7 +387,6 @@
     text-align: center;
     padding-inline: t.$space-xxs;
 
-    // Garis kiri dan kanan, setinggi pusat lingkaran.
     &::before,
     &::after {
       content: "";
@@ -416,7 +410,6 @@
       display: none;
     }
 
-    // Garis yang sudah dilewati ikut hijau.
     &[data-state="selesai"]::before,
     &[data-state="selesai"]::after,
     &[data-state="dikerjakan"]::before {

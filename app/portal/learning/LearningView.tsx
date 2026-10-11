@@ -130,7 +130,7 @@ function ChaptersCard({ card, hasClass }: { card: PortalLevelCard | null; hasCla
     <section className="card stack" aria-labelledby="chapters-heading">
       <div className="row row-between">
         <h2 className="h5" id="chapters-heading">
-          {card ? `Nilai per Bab — Level ${card.level.name}` : "Nilai per Bab"}
+          {card ? `Nilai per Bab Level ${card.level.name}` : "Nilai per Bab"}
         </h2>
         {chapters && chapters.kkm !== null && (
           <span className="badge badge-terkunci">KKM {chapters.kkm}</span>

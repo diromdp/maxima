@@ -29,6 +29,8 @@ const validateUser = schemaResolver(userFormSchema, { sync: true })
 const TITLE_STYLE = { title: { fontFamily: "var(--font-heading)", fontWeight: 650, fontSize: 20 } }
 const ROLE_LOCKED =
   "Mengganti peran butuh kewenangan Memberi hak akses. Minta super admin atau General Admin."
+const KEY_HOLDER_LOCKED =
+  "Pengguna ini memegang kewenangan Memberi hak akses, jadi surel, kata sandi, peran, cabang, dan statusnya hanya dapat diubah super admin."
 
 const formOf = (user: UserRow | undefined): UserForm => ({
   name: user?.name ?? "",
@@ -55,6 +57,9 @@ export function UserModal({
   onClose: () => void
 }) {
   const initialValues = formOf(initial)
+  const isKeyHolderLocked =
+    !isSuperAdmin &&
+    roles.some((role) => role.id === initial?.role?.id && role.capabilities.includes(ACCESS_GRANT))
   const form = useForm<UserForm>({
     initialValues,
     validate: (values) => ({
@@ -88,6 +93,7 @@ export function UserModal({
     >
       <form className="stack stack-lg" onSubmit={submit}>
         {formError && <Notice tone="danger">{formError}</Notice>}
+        {isKeyHolderLocked && <Notice tone="warning">{KEY_HOLDER_LOCKED}</Notice>}
 
         <div className="grid-2">
           <TextInput
@@ -101,6 +107,7 @@ export function UserModal({
             label="Email"
             placeholder="nama@maxima.co.id"
             withAsterisk
+            disabled={isKeyHolderLocked}
             {...form.getInputProps("email")}
           />
         </div>
@@ -115,6 +122,7 @@ export function UserModal({
           }
           autoComplete="new-password"
           withAsterisk={!initial}
+          disabled={isKeyHolderLocked}
           {...form.getInputProps("password")}
         />
 
@@ -122,7 +130,7 @@ export function UserModal({
           label="Peran"
           placeholder="Pilih peran"
           data={roleOptions}
-          disabled={!canGrant}
+          disabled={!canGrant || isKeyHolderLocked}
           description={canGrant ? undefined : ROLE_LOCKED}
           withAsterisk
           {...form.getInputProps("roleId")}
@@ -143,11 +151,13 @@ export function UserModal({
             )
           }
           error={form.errors.branchIds}
+          disabled={isKeyHolderLocked}
         />
 
         <Checkbox
           label="Aktif"
           description="Pengguna nonaktif tidak bisa masuk, datanya tetap tersimpan."
+          disabled={isKeyHolderLocked}
           {...form.getInputProps("isActive", { type: "checkbox" })}
         />
 
