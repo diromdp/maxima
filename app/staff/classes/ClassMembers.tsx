@@ -175,7 +175,13 @@ export function ClassMembers({ canEdit }: { canEdit: boolean }) {
           />
           <Facts
             items={[
-              { label: "Pengajar", value: room.teacher?.name ?? "Belum ada" },
+              {
+                label: "Pengajar",
+                value:
+                  room.teachers.length > 0
+                    ? room.teachers.map((teacher) => teacher.name).join(", ")
+                    : "Belum ada",
+              },
               { label: "Level", value: `Deutsch ${room.level.name}` },
               { label: "Jadwal", value: room.schedule },
               { label: "Kapasitas", value: `${capacityLabel(room)} Siswa` },

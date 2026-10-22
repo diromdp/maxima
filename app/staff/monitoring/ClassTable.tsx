@@ -53,8 +53,13 @@ export function ClassTable() {
             {
               key: "pengajar",
               header: "Pengajar",
-              sort: (row) => row.teacher?.name ?? "",
-              cell: (row) => row.teacher?.name ?? <span className="text-muted">{DASH}</span>,
+              sort: (row) => row.teachers[0]?.name ?? "",
+              cell: (row) =>
+                row.teachers.length > 0 ? (
+                  row.teachers.map((teacher) => teacher.name).join(", ")
+                ) : (
+                  <span className="text-muted">{DASH}</span>
+                ),
             },
             {
               key: "siswa",

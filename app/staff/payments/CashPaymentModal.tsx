@@ -231,7 +231,7 @@ export function CashPaymentModal({ onClose }: { onClose: () => void }) {
           placeholder="Rupiah / Euro / Dana Talang"
           description={
             student
-              ? "Rupiah untuk tunai di kasir yang dicatat admin; Bayar Cash dari portal masuk sendiri."
+              ? "Rupiah untuk tunai di kasir yang dicatat admin; Transfer Bank dari portal masuk sendiri."
               : "Pilih siswa dulu. Jenis yang boleh dipilih mengikuti paket siswa itu."
           }
           withAsterisk

@@ -5,6 +5,7 @@ import { DateInput, DatesProvider } from "@mantine/dates"
 import { schemaResolver, useForm } from "@mantine/form"
 
 import { FormModal } from "@/src/components/ui/FormModal"
+import { useMasterOptions } from "@/src/entities/master-data/use-master-options"
 import { savePromo } from "@/src/entities/package/actions"
 import {
   DISCOUNT_TYPES,
@@ -22,6 +23,7 @@ const formOf = (initial: PromoView | undefined): PromoForm => ({
   discountType: initial?.discountType ?? "Persentase",
   value: (initial?.discountType === "Nominal" ? initial.amountIdr : initial?.percent) ?? "",
   packageIds: initial?.packages.map((pkg) => pkg.id) ?? [],
+  branchIds: initial?.branches.map((branch) => branch.id) ?? [],
   startsOn: initial?.startsOn ?? "",
   endsOn: initial?.endsOn ?? "",
   status: initial && initial.status !== "DRAFT" ? "AKTIF" : "DRAFT",
@@ -53,6 +55,14 @@ export function PromoFormModal({
   const packageOptions = packages
     .filter((pkg) => pkg.status === "Aktif" || selected.includes(pkg.id))
     .map((pkg) => ({ value: pkg.id, label: pkg.name }))
+  const { branches } = useMasterOptions()
+  const selectedBranches = form.values.branchIds
+  const branchOptions = [
+    ...branches,
+    ...(initial?.branches ?? [])
+      .filter((branch) => !branches.some((option) => option.value === branch.id))
+      .map((branch) => ({ value: branch.id, label: branch.name })),
+  ]
 
   return (
     <FormModal
@@ -117,6 +127,15 @@ export function PromoFormModal({
         data={packageOptions}
         clearable
         {...form.getInputProps("packageIds")}
+      />
+
+      <MultiSelect
+        label="Cabang"
+        description="Kosongkan bila berlaku untuk semua cabang. Siswa dari cabang lain tidak dapat memakai kode ini."
+        placeholder={selectedBranches.length === 0 ? "Semua Cabang" : undefined}
+        data={branchOptions}
+        clearable
+        {...form.getInputProps("branchIds")}
       />
 
       <DatesProvider settings={{ locale: "id" }}>

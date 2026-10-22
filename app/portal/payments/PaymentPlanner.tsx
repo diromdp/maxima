@@ -8,7 +8,7 @@ import { useState } from "react"
 
 import { DropzoneBody } from "@/src/components/ui/DropzoneBody"
 import { Notice } from "@/src/components/ui/Notice"
-import { openCheckout, presignOwnProof, submitCashPayment } from "@/src/entities/portal/actions"
+import { openCheckout, presignOwnProof, submitTransferPayment } from "@/src/entities/portal/actions"
 import {
   nextPaymentLabelOf,
   type Checkout,
@@ -29,7 +29,7 @@ import {
 } from "@/src/lib/upload"
 
 type AmountChoice = "leave" | "installment" | "payoff" | "custom"
-type Method = "Payment Gateway" | "Bayar Cash"
+type Method = "Payment Gateway" | "Transfer Bank"
 
 export type LeaveDue = { readonly number: string; readonly amountIdr: number }
 
@@ -57,15 +57,16 @@ const SNAP_URL = env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION
 
 const METHODS: readonly { readonly name: Method; readonly note: string }[] = [
   { name: "Payment Gateway", note: "Bayar online, tercatat otomatis" },
-  { name: "Bayar Cash", note: "Di kasir cabang, unggah bukti" },
+  { name: "Transfer Bank", note: "Transfer ke rekening Maxima, unggah bukti" },
 ]
 
 const PAYMENT_KEYS = [["portal-payments"], ["portal-dashboard"]] as const
 
 const rupiah = (amount: number) => formatMoney(idr(amount))
 
-async function sendCash(
+async function sendTransfer(
   amountIdr: number,
+  bankAccountId: string,
   proof: File,
   idempotencyKey: string,
 ): Promise<ActionResult> {
@@ -73,7 +74,7 @@ async function sendCash(
   const presigned = await presignOwnProof({ mimeType: proof.type, sizeBytes: proof.size })
   if (!presigned.ok) return presigned
   if (!(await putToStorage(presigned.data, proof))) return failureOf(UPLOAD_FAILED)
-  return submitCashPayment(amountIdr, presigned.data.proofId, idempotencyKey)
+  return submitTransferPayment(amountIdr, bankAccountId, presigned.data.proofId, idempotencyKey)
 }
 
 function DetailRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
@@ -117,6 +118,10 @@ export function PaymentPlanner({
   const [choice, setChoice] = useState<AmountChoice>(defaultChoice)
   const [customAmount, setCustomAmount] = useState<number | string>("")
   const [method, setMethod] = useState<Method>("Payment Gateway")
+  const bankAccounts = payments.bankAccounts
+  const defaultBankAccountId = bankAccounts.length === 1 ? (bankAccounts[0]?.id ?? null) : null
+  const [bankAccountId, setBankAccountId] = useState<string | null>(defaultBankAccountId)
+  const bankAccount = bankAccounts.find((account) => account.id === bankAccountId) ?? null
   const [proof, setProof] = useState<File | null>(null)
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -126,9 +131,18 @@ export function PaymentPlanner({
     mutationFn: ({ amountIdr, key }: { amountIdr: number; key: string }) =>
       openCheckout(amountIdr, key),
   })
-  const cash = useMutation({
-    mutationFn: ({ amountIdr, file, key }: { amountIdr: number; file: File; key: string }) =>
-      sendCash(amountIdr, file, key),
+  const transfer = useMutation({
+    mutationFn: ({
+      amountIdr,
+      accountId,
+      file,
+      key,
+    }: {
+      amountIdr: number
+      accountId: string
+      file: File
+      key: string
+    }) => sendTransfer(amountIdr, accountId, file, key),
   })
 
   const amountIdr =
@@ -156,7 +170,13 @@ export function PaymentPlanner({
     choice === "custom" && amountIdr > remaining
       ? `nominal tidak boleh melebihi sisa ${rupiah(remaining)}`
       : null,
-    method === "Bayar Cash" && !proof ? "unggah bukti pembayaran" : null,
+    method === "Transfer Bank" && bankAccounts.length === 0
+      ? "rekening tujuan belum tersedia, hubungi Finance cabang"
+      : null,
+    method === "Transfer Bank" && bankAccounts.length > 0 && !bankAccount
+      ? "pilih rekening tujuan"
+      : null,
+    method === "Transfer Bank" && !proof ? "unggah bukti transfer" : null,
   ].filter((item): item is string => item !== null)
 
   const opened = idempotencyKey !== null
@@ -166,6 +186,7 @@ export function PaymentPlanner({
     setChoice(defaultChoice)
     setCustomAmount("")
     setMethod("Payment Gateway")
+    setBankAccountId(defaultBankAccountId)
     setProof(null)
     closeReview()
   }
@@ -216,18 +237,25 @@ export function PaymentPlanner({
       },
       onError: (result) => {
         setIsPaying(false)
-        setError(result.status_message ?? "Pembayaran gagal. Coba lagi atau pilih Bayar Cash.")
+        setError(result.status_message ?? "Pembayaran gagal. Coba lagi atau pilih Transfer Bank.")
       },
       onClose: () => setIsPaying(false),
     })
   }
 
-  async function payCash(key: string) {
-    if (!proof) return
+  async function payTransfer(key: string) {
+    if (!proof || !bankAccount) return
     setError(null)
-    const result = await cash.mutateAsync({ amountIdr, file: proof, key })
+    const result = await transfer.mutateAsync({
+      amountIdr,
+      accountId: bankAccount.id,
+      file: proof,
+      key,
+    })
     if (!result.ok) return setError(result.message)
-    notify.success("Bukti Bayar Cash terkirim. Statusnya Menunggu sampai Finance memverifikasinya.")
+    notify.success(
+      "Bukti Transfer Bank terkirim. Statusnya Menunggu sampai Finance memverifikasinya.",
+    )
     reset()
     await refresh()
   }
@@ -243,7 +271,7 @@ export function PaymentPlanner({
     )
   }
 
-  const isSubmitting = cash.isPending || isPaying
+  const isSubmitting = transfer.isPending || isPaying
 
   return (
     <>
@@ -276,8 +304,8 @@ export function PaymentPlanner({
                         <span className="body">Syarat pengajuan cuti {leaveDue.number}</span>
                         <span className="caption text-muted">
                           Nominal yang ditetapkan Finance. Pengajuan cuti Anda maju sendiri begitu
-                          pembayarannya berlaku (Bayar Cash setelah disahkan Finance), tanpa unggah
-                          bukti.
+                          pembayarannya berlaku (Transfer Bank setelah disahkan Finance), tanpa
+                          unggah bukti.
                         </span>
                       </div>
                     </Group>
@@ -361,11 +389,42 @@ export function PaymentPlanner({
           </Radio.Group>
         </Stack>
 
-        {method === "Bayar Cash" && (
+        {method === "Transfer Bank" && (
+          <Stack gap="xs">
+            <Text className="field-label" component="span">
+              Rekening tujuan
+            </Text>
+            {bankAccounts.length === 0 ? (
+              <Notice tone="warning">
+                Rekening tujuan belum tersedia. Hubungi Finance cabang Anda, atau bayar lewat
+                Payment Gateway.
+              </Notice>
+            ) : (
+              <Radio.Group value={bankAccountId} onChange={setBankAccountId}>
+                <div className="grid-2">
+                  {bankAccounts.map((account) => (
+                    <Radio.Card key={account.id} value={account.id}>
+                      <Group gap="sm" wrap="nowrap" align="flex-start">
+                        <Radio.Indicator />
+                        <div className="stack stack-sm">
+                          <span className="body">{account.bankName}</span>
+                          <span className="body tabular">{account.accountNumber}</span>
+                          <span className="caption text-muted">a.n. {account.accountHolder}</span>
+                        </div>
+                      </Group>
+                    </Radio.Card>
+                  ))}
+                </div>
+              </Radio.Group>
+            )}
+          </Stack>
+        )}
+
+        {method === "Transfer Bank" && (
           <Stack gap="xs">
             <div className="stack" style={{ gap: 2 }}>
               <Text className="field-label" component="span">
-                Bukti pembayaran
+                Bukti transfer
               </Text>
               <span className="caption text-muted">
                 Pembayaran berstatus Menunggu sampai Finance memverifikasi buktinya.
@@ -443,7 +502,13 @@ export function PaymentPlanner({
             <div className="stack stack-sm list-rows">
               <DetailRow label={amountLabel} value={rupiah(amountIdr)} />
               <DetailRow label="Metode" value={method} />
-              {proof && <DetailRow label="Bukti pembayaran" value={proof.name} />}
+              {bankAccount && (
+                <DetailRow
+                  label="Rekening tujuan"
+                  value={`${bankAccount.bankName} ${bankAccount.accountNumber}`}
+                />
+              )}
+              {proof && <DetailRow label="Bukti transfer" value={proof.name} />}
               <DetailRow label="Total dibayar" value={rupiah(amountIdr)} strong />
             </div>
           )}
@@ -451,7 +516,7 @@ export function PaymentPlanner({
           <Text size="sm" c="dimmed">
             {method === "Payment Gateway"
               ? "Biaya layanan dibayar ke penyedia pembayaran, tidak dihitung sebagai pembayaran paket. Invoice dikirim ke email."
-              : "Status Menunggu sampai Finance memverifikasi bukti pembayaran. Invoice dikirim ke email."}
+              : "Status Menunggu sampai Finance memverifikasi bukti transfer. Invoice dikirim ke email."}
           </Text>
 
           <Group justify="flex-end">
@@ -485,9 +550,9 @@ export function PaymentPlanner({
                 type="button"
                 className="btn btn-primary"
                 disabled={isSubmitting}
-                onClick={() => idempotencyKey && void payCash(idempotencyKey)}
+                onClick={() => idempotencyKey && void payTransfer(idempotencyKey)}
               >
-                {cash.isPending ? "Mengirim..." : `Bayar ${rupiah(amountIdr)}`}
+                {transfer.isPending ? "Mengirim..." : `Bayar ${rupiah(amountIdr)}`}
               </button>
             )}
           </Group>

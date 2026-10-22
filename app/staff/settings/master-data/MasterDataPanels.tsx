@@ -77,6 +77,15 @@ const MASTER_TABS: readonly MasterTab[] = [
     note: "Nominal tiap gerbang diatur per paket di halaman Master Paket & Promo.",
   },
   {
+    value: "rekening-bank",
+    label: "Rekening Bank",
+    type: "bank_account",
+    title: "Rekening Bank",
+    unit: "rekening",
+    nameHeader: "Nama Bank",
+    note: "Rekening tujuan yang dipilih siswa saat membayar lewat Transfer Bank di portal. Rekening yang dinonaktifkan tidak lagi tampil di portal; rekening yang sudah dipakai pembayaran tidak dapat dihapus.",
+  },
+  {
     value: "layanan",
     label: "Layanan",
     type: "service",
@@ -199,6 +208,23 @@ function masterColumns(tab: MasterTab, canEdit: boolean): DataColumn<MasterItemR
       name,
       { key: "email", header: "Surel", cell: (row) => row.contactEmail ?? "-" },
       { key: "phone", header: "Telepon", cell: (row) => row.contactPhone ?? "-" },
+      statusColumn(),
+    ]
+  }
+  if (tab.type === "bank_account") {
+    return [
+      {
+        key: "bank",
+        header: "Nama Bank",
+        wrap: true,
+        cell: (row) => nameCell(row.bankName ?? row.name),
+      },
+      {
+        key: "number",
+        header: "Nomor Rekening",
+        cell: (row) => <span className="tabular">{row.accountNumber}</span>,
+      },
+      { key: "holder", header: "Atas Nama", wrap: true, cell: (row) => row.accountHolder },
       statusColumn(),
     ]
   }

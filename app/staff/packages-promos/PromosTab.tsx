@@ -23,7 +23,7 @@ import { useListParams } from "@/src/lib/use-list-params"
 import { PromoFormModal } from "./PromoFormModal"
 
 const SKELETON_ROWS = 5
-const PROMO_COLUMNS = 8
+const PROMO_COLUMNS = 9
 
 const PROMO_STATUS_BADGE: Readonly<Record<PromoStatus, string>> = {
   AKTIF: "badge-success",
@@ -38,6 +38,11 @@ const formatDiscount = (promo: PromoView): string =>
 
 const appliesToLabel = (promo: PromoView): string =>
   promo.packages.length === 0 ? "Semua Paket" : promo.packages.map((pkg) => pkg.name).join(", ")
+
+const branchesLabel = (promo: PromoView): string =>
+  promo.branches.length === 0
+    ? "Semua Cabang"
+    : promo.branches.map((branch) => branch.name).join(", ")
 
 export function PromosTab({ readOnly }: { readOnly: boolean }) {
   const queryClient = useQueryClient()
@@ -127,6 +132,7 @@ export function PromosTab({ readOnly }: { readOnly: boolean }) {
               cell: formatDiscount,
             },
             { key: "berlaku", header: "Berlaku Untuk", wrap: true, cell: appliesToLabel },
+            { key: "cabang", header: "Cabang", wrap: true, cell: branchesLabel },
             {
               key: "periode",
               header: "Periode Promo",

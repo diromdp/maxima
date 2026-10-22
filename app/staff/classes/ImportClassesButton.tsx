@@ -23,7 +23,7 @@ const IMPORTS: Record<
       <>
         Kolom wajib berjudul biru. Hari belajar dipisah titik koma (<code>Sen;Rab</code>), jam{" "}
         <code>08:00</code>, dan tanggal <code>YYYY-MM-DD</code>. Pengajar ditulis dengan alamat
-        surelnya.
+        surelnya; lebih dari satu pengajar dipisah titik koma.
       </>,
       "Simpan sebagai Excel (.xlsx), unggah, periksa hasilnya, lalu impor.",
     ],

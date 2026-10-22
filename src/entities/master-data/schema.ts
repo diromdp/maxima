@@ -13,6 +13,7 @@ export type MasterType =
   | "gate"
   | "service"
   | "departure_item"
+  | "bank_account"
 
 export type MasterItemRow = {
   id: string
@@ -23,6 +24,9 @@ export type MasterItemRow = {
   status: MasterStatus
   contactEmail: string | null
   contactPhone: string | null
+  bankName: string | null
+  accountNumber: string | null
+  accountHolder: string | null
 }
 
 export type DocumentGroup = "Pribadi" | "Hasil Layanan" | "Bewerbung" | "Dari Betrieb"
@@ -68,6 +72,19 @@ export const masterItemFormSchema = z.object({
       .trim()
       .regex(PHONE, "Nomor telepon hanya boleh angka, spasi, tanda hubung, dan + di depan."),
   ]),
+  bankName: z.string().trim(),
+  accountNumber: z.string().trim(),
+  accountHolder: z.string().trim(),
+})
+
+export const bankAccountFormSchema = masterItemFormSchema.extend({
+  name: z.string(),
+  bankName: z.string().trim().min(1, "Isi nama bank.").max(60),
+  accountNumber: z
+    .string()
+    .trim()
+    .regex(/^\d{5,30}$/, "Nomor rekening hanya angka, 5 sampai 30 digit, tanpa spasi atau titik."),
+  accountHolder: z.string().trim().min(1, "Isi nama pemilik rekening.").max(120),
 })
 
 export const branchFormSchema = (initialCode: string | null) =>

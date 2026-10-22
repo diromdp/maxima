@@ -5,6 +5,7 @@ import { schemaResolver, useForm } from "@mantine/form"
 
 import { saveMasterItem } from "@/src/entities/master-data/actions"
 import {
+  bankAccountFormSchema,
   branchFormSchema,
   MASTER_STATUSES,
   masterItemFormSchema,
@@ -28,6 +29,7 @@ export function MasterItemModal({
   onClose: () => void
 }) {
   const isBranch = type === "branch"
+  const isBankAccount = type === "bank_account"
   const initialCode = initial?.code ?? null
   const form = useForm<MasterItemForm>({
     initialValues: {
@@ -36,10 +38,18 @@ export function MasterItemModal({
       code: initial?.code ?? "",
       contactEmail: initial?.contactEmail ?? "",
       contactPhone: initial?.contactPhone ?? "",
+      bankName: initial?.bankName ?? "",
+      accountNumber: initial?.accountNumber ?? "",
+      accountHolder: initial?.accountHolder ?? "",
     },
-    validate: schemaResolver(isBranch ? branchFormSchema(initialCode) : masterItemFormSchema, {
-      sync: true,
-    }),
+    validate: schemaResolver(
+      isBranch
+        ? branchFormSchema(initialCode)
+        : isBankAccount
+          ? bankAccountFormSchema
+          : masterItemFormSchema,
+      { sync: true },
+    ),
   })
   const { submit, isPending, formError } = useActionForm({
     form,
@@ -68,13 +78,39 @@ export function MasterItemModal({
           onChange={(event) => form.setFieldValue("code", event.currentTarget.value.toUpperCase())}
         />
       )}
-      <TextInput
-        label="Nama"
-        placeholder={`Nama ${title.toLowerCase()}`}
-        withAsterisk
-        data-autofocus={!isBranch || undefined}
-        {...form.getInputProps("name")}
-      />
+      {isBankAccount ? (
+        <>
+          <TextInput
+            label="Nama Bank"
+            placeholder="BCA"
+            withAsterisk
+            data-autofocus
+            {...form.getInputProps("bankName")}
+          />
+          <TextInput
+            label="Nomor Rekening"
+            description="Hanya angka, tanpa spasi atau titik."
+            placeholder="1234567890"
+            inputMode="numeric"
+            withAsterisk
+            {...form.getInputProps("accountNumber")}
+          />
+          <TextInput
+            label="Atas Nama"
+            placeholder="PT Maxima Sinergi Indonesia Jerman"
+            withAsterisk
+            {...form.getInputProps("accountHolder")}
+          />
+        </>
+      ) : (
+        <TextInput
+          label="Nama"
+          placeholder={`Nama ${title.toLowerCase()}`}
+          withAsterisk
+          data-autofocus={!isBranch || undefined}
+          {...form.getInputProps("name")}
+        />
+      )}
       {isBranch && (
         <div className="grid-2">
           <TextInput

@@ -39,15 +39,16 @@ export async function presignOwnProof(file: {
   return call(() => api<ProofUpload>("/payments/me/proofs", { method: "POST", body: file }))
 }
 
-export async function submitCashPayment(
+export async function submitTransferPayment(
   amountIdr: number,
+  bankAccountId: string,
   proofId: string,
   idempotencyKey: string,
 ): Promise<ActionResult> {
   return call(async () => {
-    await api("/payments/me/cash", {
+    await api("/payments/me/transfer", {
       method: "POST",
-      body: { amountIdr, proofId },
+      body: { amountIdr, bankAccountId, proofId },
       headers: { "Idempotency-Key": idempotencyKey },
     })
     return null

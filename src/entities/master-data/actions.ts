@@ -46,6 +46,14 @@ function branchFields(form: MasterItemForm, initialCode: string | null) {
   }
 }
 
+function bankAccountFields(form: MasterItemForm) {
+  return {
+    bankName: form.bankName,
+    accountNumber: form.accountNumber,
+    accountHolder: form.accountHolder,
+  }
+}
+
 export async function saveMasterItem(
   type: MasterType,
   id: string | null,
@@ -54,7 +62,7 @@ export async function saveMasterItem(
 ): Promise<ActionResult> {
   return save("master-items", id, {
     ...(id ? {} : { type }),
-    name: form.name,
+    ...(type === "bank_account" ? bankAccountFields(form) : { name: form.name }),
     status: form.status,
     ...(type === "branch" ? branchFields(form, initialCode) : {}),
   })

@@ -106,6 +106,7 @@ function promoBody(form: PromoForm) {
     endsOn: form.endsOn,
     status: form.status,
     packageIds: form.packageIds,
+    branchIds: form.branchIds,
     discountType: form.discountType,
     percent: form.discountType === "Persentase" ? value : null,
     amountIdr: form.discountType === "Nominal" ? value : null,

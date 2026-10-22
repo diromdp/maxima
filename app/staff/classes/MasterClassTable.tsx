@@ -116,8 +116,14 @@ function columnsFor(
     {
       key: "teacher",
       header: "Pengajar",
-      sort: (room) => room.teacher?.name ?? "",
-      cell: (room) => room.teacher?.name ?? <span className="text-faint">Belum ada</span>,
+      wrap: true,
+      sort: (room) => room.teachers[0]?.name ?? "",
+      cell: (room) =>
+        room.teachers.length > 0 ? (
+          room.teachers.map((teacher) => teacher.name).join(", ")
+        ) : (
+          <span className="text-faint">Belum ada</span>
+        ),
     },
     {
       key: "capacity",

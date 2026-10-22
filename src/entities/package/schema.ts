@@ -55,6 +55,7 @@ export type PromoView = {
   endsOn: string
   status: PromoStatus
   packages: MasterRef[]
+  branches: MasterRef[]
   usedCount: number
 }
 
@@ -119,6 +120,7 @@ export const promoFormSchema = z
     discountType: z.enum(DISCOUNT_TYPES),
     value: z.union([blank, z.number().int("Nilai diskon harus angka bulat.").positive()]),
     packageIds: z.array(z.string()),
+    branchIds: z.array(z.string()),
     startsOn: z.iso.date("Pilih tanggal mulai."),
     endsOn: z.iso.date("Pilih tanggal selesai."),
     status: z.enum(EDITABLE_PROMO_STATUSES),

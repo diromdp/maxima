@@ -15,7 +15,15 @@ export const PAYMENT_STATUS_BADGE: Readonly<Record<PaymentStatus, string>> = {
 export const LANE_LABEL: Readonly<Record<Currency, string>> = { IDR: "Rupiah", EUR: "Euro" }
 
 export type PaymentKind = "Pembayaran" | "Dana Talang"
-export type PaymentMethod = "QRIS" | "Transfer VA" | "Bayar Cash" | "Tunai EUR" | "Dana Talang"
+export type PaymentMethod =
+  "QRIS" | "Transfer VA" | "Tunai IDR" | "Transfer Bank" | "Tunai EUR" | "Dana Talang"
+
+export type BankAccount = {
+  readonly id: string
+  readonly bankName: string
+  readonly accountNumber: string
+  readonly accountHolder: string
+}
 
 export type PaymentRow = {
   readonly id: string
@@ -32,6 +40,7 @@ export type PaymentRow = {
 
 export type PaymentDetail = PaymentRow & {
   readonly branch: { readonly id: string; readonly name: string } | null
+  readonly bankAccount: BankAccount | null
   readonly orderId: string | null
   readonly recordedBy: string | null
   readonly recordedByUserId: string | null

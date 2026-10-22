@@ -25,7 +25,7 @@ export type MonitoringClassRow = {
   readonly name: string
   readonly level: Ref
   readonly branch: Ref
-  readonly teacher: Ref | null
+  readonly teachers: readonly Ref[]
   readonly studentCount: number
   readonly averageScore: number | null
   readonly averageAttendance: number | null

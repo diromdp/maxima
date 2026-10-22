@@ -1,6 +1,11 @@
 import type { ApplicationStatus } from "@/src/entities/partner/schema"
 import type { PlacementDetail, VisaStatus } from "@/src/entities/placement/schema"
-import type { PaymentKind, PaymentMethod, PaymentStatus } from "@/src/entities/payment/schema"
+import type {
+  BankAccount,
+  PaymentKind,
+  PaymentMethod,
+  PaymentStatus,
+} from "@/src/entities/payment/schema"
 import { z } from "zod"
 
 import {
@@ -159,6 +164,7 @@ export type PortalPayments = {
     rows: PortalPaymentRow[]
   }
   unlocks: UnlockProjection
+  bankAccounts: readonly BankAccount[]
 }
 
 export type JourneyState = "Selesai" | "Dikerjakan" | "Menunggu"

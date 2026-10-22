@@ -23,7 +23,7 @@ export type ClassRow = {
   readonly name: string
   readonly level: Ref
   readonly branch: Ref
-  readonly teacher: Ref | null
+  readonly teachers: readonly Ref[]
   readonly capacity: number
   readonly memberCount: number
   readonly days: readonly WeekDay[]
@@ -133,7 +133,7 @@ export const classFormSchema = z
     name: z.string().trim().min(1, "Isi nama kelas.").max(80),
     levelId: z.string().min(1, "Pilih level."),
     branchId: z.string().min(1, "Pilih cabang."),
-    teacherUserId: z.string().nullable(),
+    teacherUserIds: z.array(z.string()),
     capacity: z.number("Isi kapasitas.").int("Kapasitas harus angka bulat.").min(1).max(200),
     status: z.enum(CLASS_STATUSES),
     days: z.array(z.enum(WEEK_DAYS)).min(1, "Pilih minimal satu hari belajar."),
@@ -155,7 +155,7 @@ export type ClassForm = {
   name: string
   levelId: string
   branchId: string
-  teacherUserId: string | null
+  teacherUserIds: string[]
   capacity: number | ""
   status: ClassStatus
   days: WeekDay[]

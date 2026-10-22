@@ -117,7 +117,7 @@ export function PaymentsTable({
             </button>
           }
         >
-          Tunai Euro, dana talang, dan Bayar Cash dari portal berlaku setelah Manajer Finance
+          Tunai Euro, dana talang, dan Transfer Bank dari portal berlaku setelah Manajer Finance
           mengesahkannya. Penolakan tidak menghapus catatan.
         </Notice>
       )}

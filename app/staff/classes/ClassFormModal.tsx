@@ -1,6 +1,6 @@
 "use client"
 
-import { Chip, Group, Modal, NumberInput, Select, TextInput } from "@mantine/core"
+import { Chip, Group, Modal, MultiSelect, NumberInput, Select, TextInput } from "@mantine/core"
 import { DateInput, DatesProvider, TimeInput } from "@mantine/dates"
 import { schemaResolver, useForm } from "@mantine/form"
 
@@ -27,7 +27,7 @@ const initialOf = (room?: ClassRow): ClassForm => ({
   name: room?.name ?? "",
   levelId: room?.level.id ?? "",
   branchId: room?.branch.id ?? "",
-  teacherUserId: room?.teacher?.id ?? null,
+  teacherUserIds: room ? room.teachers.map((teacher) => teacher.id) : [],
   capacity: room?.capacity ?? "",
   status: room?.status ?? "Draft",
   days: room ? [...room.days] : [],
@@ -40,6 +40,13 @@ const initialOf = (room?: ClassRow): ClassForm => ({
 export function ClassFormModal({ initial, onClose }: { initial?: ClassRow; onClose: () => void }) {
   const { branches, levels } = useMasterOptions()
   const teachers = useRead(teachersQuery())
+  const listedTeachers = teachers.data?.data ?? []
+  const teacherOptions = [
+    ...listedTeachers,
+    ...(initial?.teachers ?? []).filter(
+      (teacher) => !listedTeachers.some((listed) => listed.id === teacher.id),
+    ),
+  ].map((teacher) => ({ value: teacher.id, label: teacher.name }))
   const form = useForm<ClassForm>({
     initialValues: initialOf(initial),
     validate: schemaResolver(classFormSchema, { sync: true }),
@@ -97,19 +104,22 @@ export function ClassFormModal({ initial, onClose }: { initial?: ClassRow; onClo
             withAsterisk
             {...form.getInputProps("branchId")}
           />
-          <Select
+          <MultiSelect
             label="Pengajar"
-            description="Pengguna staf berwilayah utama Akademik."
-            placeholder={teachers.isPending ? "Memuat pengajar" : "Pilih pengajar"}
-            data={(teachers.data?.data ?? []).map((teacher) => ({
-              value: teacher.id,
-              label: teacher.name,
-            }))}
-            error={teachers.isError ? teachers.error.message : form.errors.teacherUserId}
+            description="Boleh lebih dari satu. Pengguna staf berwilayah utama Akademik."
+            placeholder={
+              teachers.isPending
+                ? "Memuat pengajar"
+                : form.values.teacherUserIds.length === 0
+                  ? "Pilih pengajar"
+                  : undefined
+            }
+            data={teacherOptions}
+            error={teachers.isError ? teachers.error.message : form.errors.teacherUserIds}
             searchable
             clearable
-            value={form.values.teacherUserId}
-            onChange={(value) => form.setFieldValue("teacherUserId", value)}
+            value={form.values.teacherUserIds}
+            onChange={(value) => form.setFieldValue("teacherUserIds", value)}
           />
         </div>
 

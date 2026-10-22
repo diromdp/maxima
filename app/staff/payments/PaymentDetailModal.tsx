@@ -159,6 +159,12 @@ function PaymentDetailBody({
           value={`${LANE_LABEL[payment.currency]} · ${payment.method}`}
         />
         <Field label="Cabang" value={payment.branch?.name ?? DASH} />
+        {payment.bankAccount && (
+          <Field
+            label="Rekening Tujuan"
+            value={`${payment.bankAccount.bankName} ${payment.bankAccount.accountNumber} a.n. ${payment.bankAccount.accountHolder}`}
+          />
+        )}
         {payment.orderId && <Field label="ID Transaksi" value={payment.orderId} />}
         {payment.receivedByName && <Field label="Penerima" value={payment.receivedByName} />}
         {payment.recordedBy && <Field label="Dicatat oleh" value={payment.recordedBy} />}
