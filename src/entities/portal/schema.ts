@@ -165,6 +165,7 @@ export type PortalPayments = {
   }
   unlocks: UnlockProjection
   bankAccounts: readonly BankAccount[]
+  paymentGatewayEnabled: boolean
 }
 
 export type JourneyState = "Selesai" | "Dikerjakan" | "Menunggu"

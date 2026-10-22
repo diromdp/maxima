@@ -16,6 +16,7 @@ import {
   type SessionKind,
   type TokenPair,
 } from "./tokens"
+import { BRANCH_COOKIE } from "./paths"
 
 const WRONG_PASSWORD = 400
 
@@ -69,6 +70,7 @@ export async function logout(): Promise<void> {
   }
   store.delete(ACCESS_COOKIE)
   store.delete(REFRESH_COOKIE)
+  store.delete(BRANCH_COOKIE)
   redirect(loginPath(kind))
 }
 

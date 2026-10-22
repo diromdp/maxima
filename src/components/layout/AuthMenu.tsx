@@ -4,15 +4,35 @@ import { Avatar, Menu, Select, Stack, Text, UnstyledButton } from "@mantine/core
 import type { FloatingPosition } from "@mantine/core"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Building02Icon, Logout01Icon, UserAccountIcon } from "@hugeicons/core-free-icons"
+import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useSyncExternalStore } from "react"
 
 import { logout } from "@/src/lib/auth/actions"
+import { BRANCH_COOKIE } from "@/src/lib/auth/paths"
 import type { Session } from "@/src/lib/auth/session"
 
 const ALL_BRANCHES = "__all__"
+const BRANCH_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
-const BRANCHES = ["Bandung"] as const
+// Cookie cabang dibaca proxy dan diteruskan ke API sebagai X-Branch; semua menu akun
+// (sidebar, top bar, drawer) berlangganan ke cookie yang sama supaya pilihannya seragam.
+const branchListeners = new Set<() => void>()
+
+function subscribeBranch(listener: () => void): () => void {
+  branchListeners.add(listener)
+  return () => branchListeners.delete(listener)
+}
+
+const readBranchCookie = (): string | null =>
+  document.cookie.match(new RegExp(`(?:^|; )${BRANCH_COOKIE}=([^;]*)`))?.[1] ?? null
+
+function writeBranchCookie(branch: string | null): void {
+  document.cookie = branch
+    ? `${BRANCH_COOKIE}=${branch}; path=/; max-age=${BRANCH_COOKIE_MAX_AGE}; samesite=lax`
+    : `${BRANCH_COOKIE}=; path=/; max-age=0`
+  branchListeners.forEach((listener) => listener())
+}
 
 export function AuthMenu({
   session,
@@ -23,10 +43,28 @@ export function AuthMenu({
   compact?: boolean
   menuPosition?: FloatingPosition
 }) {
+  const queryClient = useQueryClient()
   const isStaff = session.kind === "staff"
-  const locked = isStaff && session.branches !== null
-  const [scope, setScope] = useState<string>(locked ? session.branches!.join(", ") : ALL_BRANCHES)
-  const scopeLabel = scope === ALL_BRANCHES ? "Semua cabang" : scope
+  const ownBranches = isStaff ? session.branches : null
+  const branchOptions = isStaff ? session.branchOptions : []
+  const isLocked = branchOptions.length < 2
+  const chosenBranch = useSyncExternalStore(subscribeBranch, readBranchCookie, () =>
+    isStaff ? session.selectedBranch : null,
+  )
+  const selected = branchOptions.find((branch) => branch.id === chosenBranch)
+  const allLabel = ownBranches ? ownBranches.join(", ") : "Semua cabang"
+  const scope = selected?.id ?? ALL_BRANCHES
+  const scopeLabel = selected?.name ?? allLabel
+
+  const selectBranch = (value: string) => {
+    writeBranchCookie(value === ALL_BRANCHES ? null : value)
+    void queryClient.invalidateQueries()
+  }
+
+  const isStaleChoice = isStaff && chosenBranch !== null && selected === undefined
+  useEffect(() => {
+    if (isStaleChoice) selectBranch(ALL_BRANCHES)
+  })
 
   const label = isStaff ? session.role : session.name
   const sub = isStaff ? scopeLabel : session.nis ? `NIS ${session.nis}` : session.status
@@ -96,17 +134,17 @@ export function AuthMenu({
                 radius="xl"
                 aria-label="Cakupan cabang"
                 value={scope}
-                onChange={(v) => v && setScope(v)}
+                onChange={(value) => value && selectBranch(value)}
                 data={[
-                  { value: ALL_BRANCHES, label: "Semua cabang" },
-                  ...BRANCHES.map((b) => ({ value: b, label: b })),
+                  { value: ALL_BRANCHES, label: allLabel },
+                  ...branchOptions.map((branch) => ({ value: branch.id, label: branch.name })),
                 ]}
-                disabled={locked}
+                disabled={isLocked}
                 allowDeselect={false}
                 leftSection={<HugeiconsIcon icon={Building02Icon} size={16} strokeWidth={1.5} />}
                 comboboxProps={{ withinPortal: false, radius: "md" }}
               />
-              {locked && (
+              {isLocked && ownBranches && (
                 <Text size="xs" c="dimmed">
                   Ditetapkan oleh peran Anda.
                 </Text>

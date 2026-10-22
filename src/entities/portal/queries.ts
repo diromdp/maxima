@@ -1,4 +1,5 @@
 import { readQuery } from "@/src/lib/api/read"
+import type { PortalPage } from "@/src/lib/auth/session"
 
 import type {
   DepartureChecklist,
@@ -10,6 +11,9 @@ import type {
   PortalProfile,
   PortalProgress,
 } from "./schema"
+
+export const portalPagesQuery = () =>
+  readQuery<{ pages: PortalPage[] }>("portal-pages", "/portal/me")
 
 export const portalDashboardQuery = () =>
   readQuery<PortalDashboard>("portal-dashboard", "/portal/dashboard")

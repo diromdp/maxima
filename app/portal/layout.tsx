@@ -14,6 +14,8 @@ import { AppShell } from "@/src/components/layout/AppShell"
 import type { MenuSection } from "@/src/lib/auth/permissions"
 import { requireSession, type PortalPageCode } from "@/src/lib/auth/session"
 
+import { ActivationWatcher } from "./ActivationWatcher"
+
 const PORTAL_MENU: readonly {
   code: PortalPageCode
   label: string
@@ -63,8 +65,11 @@ export default async function PortalLayout({ children }: { children: React.React
     },
   ]
 
+  const isLocked = session.pages.some((page) => page.lockReason !== null)
+
   return (
     <AppShell session={session} sections={sections}>
+      {isLocked && <ActivationWatcher />}
       {children}
     </AppShell>
   )

@@ -8,6 +8,7 @@ import {
   ChartAnalysisIcon,
   Clock01Icon,
   ClipboardCheckIcon,
+  CreditCardIcon,
   Database01Icon,
   DocumentAttachmentIcon,
   FileTextIcon,
@@ -182,6 +183,13 @@ export const PAGES = [
     href: "/staff/settings/print-templates",
     group: "Pengaturan",
     icon: PrinterIcon,
+  },
+  {
+    id: "settings",
+    label: "Payment Gateway",
+    href: "/staff/settings/payment-gateway",
+    group: "Pengaturan",
+    icon: CreditCardIcon,
   },
   {
     id: "settings-activity-log",

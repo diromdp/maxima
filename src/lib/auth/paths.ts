@@ -1,5 +1,7 @@
 export type SessionKind = "student" | "staff"
 
+export const BRANCH_COOKIE = "maxima_branch"
+
 export const STUDENT_LOGIN = "/"
 export const STAFF_LOGIN = "/staff/login"
 

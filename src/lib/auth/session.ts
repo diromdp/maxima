@@ -7,6 +7,8 @@ import { api, ApiError } from "@/src/lib/api/client"
 import { canEdit, canView, type PageId, type Permissions } from "./permissions"
 import { ACCESS_COOKIE, homePath, readClaims, type SessionKind } from "./tokens"
 
+export type BranchOption = { readonly id: string; readonly name: string }
+
 export type StaffSession = {
   readonly kind: "staff"
   readonly id: string
@@ -16,6 +18,8 @@ export type StaffSession = {
   readonly roleId: string | null
   readonly isSuperAdmin: boolean
   readonly branches: readonly string[] | null
+  readonly branchOptions: readonly BranchOption[]
+  readonly selectedBranch: string | null
   readonly permissions: Permissions
   readonly capabilities: readonly string[]
 }
@@ -61,7 +65,14 @@ type StaffAccess = {
   superAdmin: boolean
   permissions: Permissions
   capabilities: string[]
-  profile: { name: string; email: string; roleName: string | null; branchNames: string[] }
+  selectedBranch?: string
+  profile: {
+    name: string
+    email: string
+    roleName: string | null
+    branchNames: string[]
+    branchOptions?: BranchOption[]
+  }
 }
 
 type PortalMe = {
@@ -84,6 +95,8 @@ async function loadSession(kind: SessionKind): Promise<Session> {
       roleId: access.roleId,
       isSuperAdmin: access.superAdmin,
       branches: access.profile.branchNames.length > 0 ? access.profile.branchNames : null,
+      branchOptions: access.profile.branchOptions ?? [],
+      selectedBranch: access.selectedBranch ?? null,
       permissions: access.permissions,
       capabilities: access.capabilities,
     }

@@ -1,5 +1,6 @@
 import { cookies, headers } from "next/headers"
 
+import { BRANCH_COOKIE } from "@/src/lib/auth/paths"
 import { ACCESS_COOKIE, apiUrl, clientIp, forwardedFor } from "@/src/lib/auth/tokens"
 
 import { ApiError, errorOf, FALLBACK_MESSAGE, queryString, type QueryValue } from "./errors"
@@ -18,9 +19,11 @@ export type ApiRequest = {
 async function authHeaders(isAnonymous: boolean): Promise<Record<string, string>> {
   const [store, incoming] = await Promise.all([cookies(), headers()])
   const token = isAnonymous ? undefined : store.get(ACCESS_COOKIE)?.value
+  const branch = store.get(BRANCH_COOKIE)?.value
   return {
     ...forwardedFor(clientIp(incoming)),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(token && branch ? { "X-Branch": branch } : {}),
   }
 }
 

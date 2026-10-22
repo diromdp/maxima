@@ -60,6 +60,8 @@ const METHODS: readonly { readonly name: Method; readonly note: string }[] = [
   { name: "Transfer Bank", note: "Transfer ke rekening Maxima, unggah bukti" },
 ]
 
+const GATEWAY_DISABLED = "Sedang dinonaktifkan admin, pakai Transfer Bank"
+
 const PAYMENT_KEYS = [["portal-payments"], ["portal-dashboard"]] as const
 
 const rupiah = (amount: number) => formatMoney(idr(amount))
@@ -117,7 +119,9 @@ export function PaymentPlanner({
 
   const [choice, setChoice] = useState<AmountChoice>(defaultChoice)
   const [customAmount, setCustomAmount] = useState<number | string>("")
-  const [method, setMethod] = useState<Method>("Payment Gateway")
+  const isGatewayEnabled = payments.paymentGatewayEnabled
+  const defaultMethod: Method = isGatewayEnabled ? "Payment Gateway" : "Transfer Bank"
+  const [method, setMethod] = useState<Method>(defaultMethod)
   const bankAccounts = payments.bankAccounts
   const defaultBankAccountId = bankAccounts.length === 1 ? (bankAccounts[0]?.id ?? null) : null
   const [bankAccountId, setBankAccountId] = useState<string | null>(defaultBankAccountId)
@@ -170,6 +174,9 @@ export function PaymentPlanner({
     choice === "custom" && amountIdr > remaining
       ? `nominal tidak boleh melebihi sisa ${rupiah(remaining)}`
       : null,
+    method === "Payment Gateway" && !isGatewayEnabled
+      ? "Payment Gateway sedang dinonaktifkan admin, pilih Transfer Bank"
+      : null,
     method === "Transfer Bank" && bankAccounts.length === 0
       ? "rekening tujuan belum tersedia, hubungi Finance cabang"
       : null,
@@ -185,7 +192,7 @@ export function PaymentPlanner({
   function reset() {
     setChoice(defaultChoice)
     setCustomAmount("")
-    setMethod("Payment Gateway")
+    setMethod(defaultMethod)
     setBankAccountId(defaultBankAccountId)
     setProof(null)
     closeReview()
@@ -275,7 +282,9 @@ export function PaymentPlanner({
 
   return (
     <>
-      <Script src={SNAP_URL} data-client-key={env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY} />
+      {isGatewayEnabled && (
+        <Script src={SNAP_URL} data-client-key={env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY} />
+      )}
 
       <form
         className="card stack stack-lg"
@@ -374,17 +383,27 @@ export function PaymentPlanner({
 
           <Radio.Group value={method} onChange={(value) => setMethod(value as Method)}>
             <div className="grid-2">
-              {METHODS.map(({ name, note }) => (
-                <Radio.Card key={name} value={name}>
-                  <Group gap="sm" wrap="nowrap" align="flex-start">
-                    <Radio.Indicator />
-                    <div className="stack stack-sm">
-                      <span className="body">{name}</span>
-                      <span className="caption text-muted">{note}</span>
-                    </div>
-                  </Group>
-                </Radio.Card>
-              ))}
+              {METHODS.map(({ name, note }) => {
+                const isDisabled = name === "Payment Gateway" && !isGatewayEnabled
+                return (
+                  <Radio.Card
+                    key={name}
+                    value={name}
+                    disabled={isDisabled}
+                    style={isDisabled ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
+                  >
+                    <Group gap="sm" wrap="nowrap" align="flex-start">
+                      <Radio.Indicator disabled={isDisabled} />
+                      <div className="stack stack-sm">
+                        <span className="body">{name}</span>
+                        <span className="caption text-muted">
+                          {isDisabled ? GATEWAY_DISABLED : note}
+                        </span>
+                      </div>
+                    </Group>
+                  </Radio.Card>
+                )
+              })}
             </div>
           </Radio.Group>
         </Stack>
@@ -396,8 +415,9 @@ export function PaymentPlanner({
             </Text>
             {bankAccounts.length === 0 ? (
               <Notice tone="warning">
-                Rekening tujuan belum tersedia. Hubungi Finance cabang Anda, atau bayar lewat
-                Payment Gateway.
+                {isGatewayEnabled
+                  ? "Rekening tujuan belum tersedia. Hubungi Finance cabang Anda, atau bayar lewat Payment Gateway."
+                  : "Rekening tujuan belum tersedia. Hubungi Finance cabang Anda."}
               </Notice>
             ) : (
               <Radio.Group value={bankAccountId} onChange={setBankAccountId}>

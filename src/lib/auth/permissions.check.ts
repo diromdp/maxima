@@ -43,6 +43,7 @@ assert.deepEqual(
     ["Pengguna & Hak Akses", "/staff/settings/users"],
     ["Master Data", "/staff/settings/master-data"],
     ["Template Cetak", "/staff/settings/print-templates"],
+    ["Payment Gateway", "/staff/settings/payment-gateway"],
     ["Log Aktivitas", "/staff/settings/activity-log"],
   ],
 )
